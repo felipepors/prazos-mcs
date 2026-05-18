@@ -9,12 +9,12 @@ import { useState, useMemo, useRef, useEffect } from "react";
 const FIREBASE_CONFIG = {
   // Cole aqui as credenciais do Firebase Console
   // Enquanto estiver vazio, usa localStorage (apenas neste navegador)
-  apiKey:            "",
-  authDomain:        "",
-  projectId:         "",
-  storageBucket:     "",
-  messagingSenderId: "",
-  appId:             "",
+  apiKey:            "AIzaSyDl7od6K8q0IigEmMExvqubtnK16KK0e-M",
+  authDomain:        "mcs-prazos.firebaseapp.com",
+  projectId:         "mcs-prazos",
+  storageBucket:     "mcs-prazos.firebasestorage.app",
+  messagingSenderId: "1043639129805",
+  appId:             "1:1043639129805:web:c64ab1fe54e75056673b84",
 };
 
 // Detecta se o Firebase está configurado
