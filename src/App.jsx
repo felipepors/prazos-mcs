@@ -865,14 +865,14 @@ export default function App() {
 
   // Auth (só ativa quando Firebase configurado)
   const { user, loading: authLoading, ativo: authAtivo } = useAuth();
-  if (authAtivo && authLoading) {
+  const _carregandoAuth = authAtivo && authLoading; if (false) {
     return (
       <div style={{ minHeight:"100vh", background:TEMA[modo].bg, display:"flex", alignItems:"center", justifyContent:"center", color:TEMA[modo].textMuted, fontFamily:"Inter,system-ui,sans-serif" }}>
         Carregando...
       </div>
     );
   }
-  if (authAtivo && !user) return <TelaLogin T={T} modo={modo} onToast={()=>{}} />;
+  const _precisaLogin = authAtivo && !user;
 
   // Estados de dados (com persistência)
   const [prazos, setPrazos]             = useStorage("mcs.prazos", INITIAL);
@@ -1074,7 +1074,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ fontFamily:"Inter,system-ui,-apple-system,sans-serif", minHeight:"100vh", background:T.bg, color:T.text, paddingBottom:80 }}>
+    _carregandoAuth ? <div style={{minHeight:"100vh",background:TEMA[modo].bg,display:"flex",alignItems:"center",justifyContent:"center",color:TEMA[modo].textMuted,fontFamily:"Inter,system-ui,sans-serif"}}>Carregando...</div> : _precisaLogin ? <TelaLogin T={T} modo={modo} onToast={()=>{}} /> : <div style={{ fontFamily:"Inter,system-ui,-apple-system,sans-serif", minHeight:"100vh", background:T.bg, color:T.text, paddingBottom:80 }}>
       <style>{`
         @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes pulse { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
