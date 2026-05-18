@@ -59,8 +59,10 @@ function useStorage(key, initial) {
   }, [key, val]);
 
   // Se Firebase ativo + usuário logado, sincroniza com Firestore
+  const hidratado = useRef(false);
   useEffect(() => {
     if (!FIREBASE_ATIVO || !_userId || !_firestore || !window._fb) return;
+    if (!hidratado.current) { hidratado.current = true; return; }
     const { doc, setDoc } = window._fb;
     const ref = doc(_firestore, "usuarios", _userId, "dados", key.replace("mcs.", ""));
     setDoc(ref, { val: JSON.stringify(val), updatedAt: Date.now() }, { merge: true }).catch(e => console.error("Erro ao sincronizar:", e));
@@ -72,13 +74,13 @@ function useStorage(key, initial) {
     const { doc, onSnapshot } = window._fb;
     const ref = doc(_firestore, "usuarios", _userId, "dados", key.replace("mcs.", ""));
     const unsub = onSnapshot(ref, snap => {
+      if (!snap.exists()) return;
       const data = snap.data();
-      if (data?.val) {
-        try {
-          const remoto = JSON.parse(data.val);
-          if (JSON.stringify(remoto) !== JSON.stringify(val)) setVal(remoto);
-        } catch {}
-      }
+      if (!data?.val) return;
+      try {
+        const remoto = JSON.parse(data.val);
+        if (JSON.stringify(remoto) !== JSON.stringify(val)) setVal(remoto);
+      } catch {}
     });
     return () => unsub();
   // eslint-disable-next-line
