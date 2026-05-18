@@ -1,131 +1,260 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 
-// ═════════════════════════════════════════════════════════════════════════════
-// PERSISTÊNCIA — localStorage OU Firebase (configurável)
-// ═════════════════════════════════════════════════════════════════════════════
-// Para ativar a sincronização em nuvem, siga o guia FIREBASE-SETUP.md
-// e substitua FIREBASE_CONFIG abaixo pelas suas credenciais reais.
+// ═══════════════════════════════════════════════════════════════════════════
+// PERSISTÊNCIA — Supabase + localStorage (fallback offline)
+// ═══════════════════════════════════════════════════════════════════════════
+const SUPABASE_URL = "https://frprebgyfnbeetuwmrzd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_e1Xx9UGhvma2O0LxN0csYw_yM40XJoA";
+const SUPABASE_ATIVO = !!SUPABASE_URL && !!SUPABASE_KEY;
 
-const FIREBASE_CONFIG = {
-  // Cole aqui as credenciais do Firebase Console
-  // Enquanto estiver vazio, usa localStorage (apenas neste navegador)
-  apiKey:            "AIzaSyDl7od6K8q0IigEmMExvqubtnK16KK0e-M",
-  authDomain:        "mcs-prazos.firebaseapp.com",
-  projectId:         "mcs-prazos",
-  storageBucket:     "mcs-prazos.firebasestorage.app",
-  messagingSenderId: "1043639129805",
-  appId:             "1:1043639129805:web:c64ab1fe54e75056673b84",
-};
-
-// Detecta se o Firebase está configurado
-const FIREBASE_ATIVO = !!FIREBASE_CONFIG.apiKey;
-
-// ─── Firebase lazy init (só carrega se estiver configurado) ──────────────────
-let _firebaseApp = null;
-let _firestore = null;
-let _auth = null;
+let _sb = null;
+let _sbReady = null;
 let _userId = null;
+let _onSyncError = null;
+function notifySyncError(msg) { try { _onSyncError && _onSyncError(msg, "erro"); } catch(e) {} }
 
-async function initFirebase() {
-  if (!FIREBASE_ATIVO || _firebaseApp) return;
+async function initSupabase() {
+  if (!SUPABASE_ATIVO || _sb) return _sb;
+  if (_sbReady) return _sbReady;
+  _sbReady = (async () => {
+    try {
+      const mod = await import("https://esm.sh/@supabase/supabase-js@2");
+      _sb = mod.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, storageKey: "mcs.sb.auth" }
+      });
+      return _sb;
+    } catch (e) {
+      console.error("Supabase falhou ao iniciar:", e);
+      _sb = null;
+      return null;
+    }
+  })();
+  return _sbReady;
+}
+if (SUPABASE_ATIVO) initSupabase();
+
+// ─── Estado global compartilhado (uma linha JSON no Postgres) ───────────────
+const _estado = {};
+let _estadoCarregado = false;
+const _estadoSubs = new Set();
+let _debounceTimer = null;
+
+function _normKey(k) { return k.replace(/^mcs\./, ""); }
+function _broadcast(key) { _estadoSubs.forEach(fn => { try { fn(key); } catch(e) {} }); }
+
+async function _flush() {
+  if (!_userId || !_sb) return;
   try {
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-    const { getFirestore, doc, getDoc, setDoc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
-    _firebaseApp = initializeApp(FIREBASE_CONFIG);
-    _firestore = getFirestore(_firebaseApp);
-    _auth = getAuth(_firebaseApp);
-    window._fb = { doc, getDoc, setDoc, onSnapshot, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut };
+    const payload = { user_id: _userId, dados: _estado };
+    const { error } = await _sb.from("estado_usuario").upsert(payload, { onConflict: "user_id" });
+    if (error) {
+      console.error("Erro ao sincronizar com Supabase:", error);
+      notifySyncError("Falha ao sincronizar com a nuvem");
+    }
   } catch (e) {
-    console.error("Firebase falhou ao iniciar:", e);
+    console.error("Erro ao sincronizar:", e);
+    notifySyncError("Falha ao sincronizar com a nuvem");
   }
 }
-if (FIREBASE_ATIVO) initFirebase();
 
-// ─── Hook unificado: usa Firebase se configurado, senão localStorage ─────────
-function useStorage(key, initial) {
-  const [val, setVal] = useState(() => {
+function _scheduleFlush() {
+  if (_debounceTimer) clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(() => { _debounceTimer = null; _flush(); }, 2000);
+}
+
+async function _hidratarDoServidor() {
+  if (!_userId || !_sb) return;
+  try {
+    const { data, error } = await _sb.from("estado_usuario").select("dados").eq("user_id", _userId).maybeSingle();
+    if (error) {
+      console.error("Erro lendo estado:", error);
+      notifySyncError("Falha ao ler dados da nuvem");
+      return;
+    }
+    if (data && data.dados && typeof data.dados === "object") {
+      Object.entries(data.dados).forEach(([k, v]) => {
+        _estado[k] = v;
+        try { window.localStorage.setItem("mcs." + k, JSON.stringify(v)); } catch(e) {}
+        _broadcast(k);
+      });
+    } else {
+      const KEYS = ["modo","prazos","tiposCustom","tarefas","feriados","feriadosNomes","clientes","ultimoBackup","email"];
+      KEYS.forEach(k => {
+        try {
+          const raw = window.localStorage.getItem("mcs." + k);
+          if (raw !== null) _estado[k] = JSON.parse(raw);
+        } catch(e) {}
+      });
+      _scheduleFlush();
+    }
+    _estadoCarregado = true;
+  } catch (e) {
+    console.error("Erro hidratando:", e);
+    notifySyncError("Falha ao ler dados da nuvem");
+  }
+}
+
+let _realtimeChannel = null;
+function _conectarRealtime() {
+  if (!_userId || !_sb || _realtimeChannel) return;
+  try {
+    _realtimeChannel = _sb.channel("estado-" + _userId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "estado_usuario", filter: "user_id=eq." + _userId },
+        payload => {
+          const novo = payload && payload.new && payload.new.dados;
+          if (!novo || typeof novo !== "object") return;
+          Object.entries(novo).forEach(([k, v]) => {
+            if (JSON.stringify(_estado[k]) !== JSON.stringify(v)) {
+              _estado[k] = v;
+              try { window.localStorage.setItem("mcs." + k, JSON.stringify(v)); } catch(e) {}
+              _broadcast(k);
+            }
+          });
+        })
+      .subscribe();
+  } catch (e) { console.error("Realtime falhou:", e); }
+}
+function _desconectarRealtime() {
+  if (_realtimeChannel && _sb) {
+    try { _sb.removeChannel(_realtimeChannel); } catch(e) {}
+    _realtimeChannel = null;
+  }
+}
+
+// ─── Hook unificado: lê/escreve no estado global + localStorage ─────────────
+function useStorage(fullKey, initial) {
+  const key = _normKey(fullKey);
+  const [val, setValRaw] = useState(() => {
+    if (key in _estado) return _estado[key];
     try {
-      const raw = (typeof window !== "undefined" && window.localStorage) ? window.localStorage.getItem(key) : null;
-      return raw ? JSON.parse(raw) : initial;
-    } catch { return initial; }
+      const raw = (typeof window !== "undefined" && window.localStorage) ? window.localStorage.getItem(fullKey) : null;
+      const parsed = raw !== null ? JSON.parse(raw) : initial;
+      _estado[key] = parsed;
+      return parsed;
+    } catch (e) {
+      _estado[key] = initial;
+      return initial;
+    }
   });
 
-  // Sempre salva no localStorage (cache local + fallback)
   useEffect(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) window.localStorage.setItem(key, JSON.stringify(val));
-    } catch {}
-  }, [key, val]);
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem(fullKey, JSON.stringify(val));
+      }
+    } catch (e) {}
+  }, [fullKey, val]);
 
-  // Se Firebase ativo + usuário logado, sincroniza com Firestore
-  const hidratado = useRef(false);
   useEffect(() => {
-    if (!FIREBASE_ATIVO || !_userId || !_firestore || !window._fb) return;
-    if (!hidratado.current) { hidratado.current = true; return; }
-    const { doc, setDoc } = window._fb;
-    const ref = doc(_firestore, "usuarios", _userId, "dados", key.replace("mcs.", ""));
-    setDoc(ref, { val: JSON.stringify(val), updatedAt: Date.now() }, { merge: true }).catch(e => console.error("Erro ao sincronizar:", e));
-  }, [key, val]);
+    const handler = (k) => {
+      if (k !== key) return;
+      const v = _estado[k];
+      if (JSON.stringify(v) !== JSON.stringify(val)) setValRaw(v);
+    };
+    _estadoSubs.add(handler);
+    if (_estadoCarregado && key in _estado) {
+      if (JSON.stringify(_estado[key]) !== JSON.stringify(val)) setValRaw(_estado[key]);
+    }
+    return () => { _estadoSubs.delete(handler); };
+    // eslint-disable-next-line
+  }, [key]);
 
-  // Subscribe a mudanças do Firebase (outros dispositivos)
-  useEffect(() => {
-    if (!FIREBASE_ATIVO || !_userId || !_firestore || !window._fb) return;
-    const { doc, onSnapshot } = window._fb;
-    const ref = doc(_firestore, "usuarios", _userId, "dados", key.replace("mcs.", ""));
-    const unsub = onSnapshot(ref, snap => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-      if (!data?.val) return;
-      try {
-        const remoto = JSON.parse(data.val);
-        if (JSON.stringify(remoto) !== JSON.stringify(val)) setVal(remoto);
-      } catch {}
+  const setVal = (next) => {
+    setValRaw(prev => {
+      const computed = (typeof next === "function") ? next(prev) : next;
+      _estado[key] = computed;
+      if (_userId && _sb) _scheduleFlush();
+      return computed;
     });
-    return () => unsub();
-  // eslint-disable-next-line
-  }, [_userId]);
+  };
 
   return [val, setVal];
 }
 
-// Hook de autenticação (Firebase)
+// ─── Hook de autenticação (Supabase) ────────────────────────────────────────
 function useAuth() {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(FIREBASE_ATIVO);
+  const [loading, setLoading] = useState(SUPABASE_ATIVO);
   useEffect(() => {
-    if (!FIREBASE_ATIVO) { setLoading(false); return; }
-    const checkAuth = setInterval(() => {
-      if (window._fb && _auth) {
-        clearInterval(checkAuth);
-        const { onAuthStateChanged } = window._fb;
-        onAuthStateChanged(_auth, u => {
-          _userId = u?.uid || null;
-          setUser(u);
-          setLoading(false);
-        });
+    if (!SUPABASE_ATIVO) { setLoading(false); return; }
+    let sub = null;
+    let alive = true;
+    (async () => {
+      const sb = await initSupabase();
+      if (!alive || !sb) { setLoading(false); return; }
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const u = (session && session.user) || null;
+        _userId = u ? u.id : null;
+        setUser(u);
+        setLoading(false);
+        if (_userId) {
+          await _hidratarDoServidor();
+          _conectarRealtime();
+        }
+      } catch (e) {
+        console.error("getSession falhou:", e);
+        setLoading(false);
       }
-    }, 100);
-    return () => clearInterval(checkAuth);
+      const { data } = sb.auth.onAuthStateChange(async (event, session) => {
+        const u = (session && session.user) || null;
+        const prev = _userId;
+        _userId = u ? u.id : null;
+        setUser(u);
+        if (_userId && _userId !== prev) {
+          _desconectarRealtime();
+          _estadoCarregado = false;
+          await _hidratarDoServidor();
+          _conectarRealtime();
+        } else if (!_userId) {
+          _desconectarRealtime();
+        }
+      });
+      sub = data && data.subscription;
+    })();
+    return () => { alive = false; try { sub && sub.unsubscribe(); } catch(e) {} };
   }, []);
-  return { user, loading, ativo: FIREBASE_ATIVO };
+  return { user, loading, ativo: SUPABASE_ATIVO };
+}
+
+function _mapAuthError(e) {
+  const m = (e && e.message) || "";
+  const mk = (code) => { const x = new Error(m); x.code = code; return x; };
+  if (/Invalid login credentials/i.test(m)) return mk("auth/wrong-password");
+  if (/Email not confirmed/i.test(m)) return mk("auth/user-not-found");
+  if (/User already registered/i.test(m)) return mk("auth/email-already-in-use");
+  if (/Password should be at least/i.test(m)) return mk("auth/weak-password");
+  if (/invalid.*email/i.test(m)) return mk("auth/invalid-email");
+  return e || new Error("Erro de autenticação");
 }
 
 async function fazerLogin(email, senha) {
-  if (!FIREBASE_ATIVO || !window._fb) throw new Error("Firebase não configurado");
-  const { signInWithEmailAndPassword } = window._fb;
-  return signInWithEmailAndPassword(_auth, email, senha);
+  if (!SUPABASE_ATIVO) throw new Error("Supabase não configurado");
+  const sb = await initSupabase();
+  if (!sb) throw new Error("Supabase indisponível");
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+  if (error) throw _mapAuthError(error);
+  return data;
 }
 async function criarConta(email, senha) {
-  if (!FIREBASE_ATIVO || !window._fb) throw new Error("Firebase não configurado");
-  const { createUserWithEmailAndPassword } = window._fb;
-  return createUserWithEmailAndPassword(_auth, email, senha);
+  if (!SUPABASE_ATIVO) throw new Error("Supabase não configurado");
+  const sb = await initSupabase();
+  if (!sb) throw new Error("Supabase indisponível");
+  const { data, error } = await sb.auth.signUp({ email, password: senha });
+  if (error) throw _mapAuthError(error);
+  return data;
 }
 async function fazerLogout() {
-  if (!FIREBASE_ATIVO || !window._fb) return;
-  const { signOut } = window._fb;
-  return signOut(_auth);
+  if (!SUPABASE_ATIVO) return;
+  const sb = await initSupabase();
+  if (!sb) return;
+  if (_debounceTimer) { clearTimeout(_debounceTimer); _debounceTimer = null; await _flush(); }
+  _desconectarRealtime();
+  _userId = null;
+  _estadoCarregado = false;
+  return sb.auth.signOut();
 }
+
 
 // ─── Tema (claro/escuro) ──────────────────────────────────────────────────────
 const TEMA = {
@@ -933,6 +1062,7 @@ export default function App() {
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2500);
   };
+  _onSyncError = toast;
 
   const shown = useRef(false);
   useEffect(() => { if (!shown.current) { shown.current = true; setResumoAberto(true); } }, []);
