@@ -1222,7 +1222,7 @@ export default function App() {
       {/* ── HEADER COMPACTO ── */}
       <header style={{
         background: modo==="dark" ? "linear-gradient(135deg,#1a202c,#2d3748)" : "linear-gradient(135deg,#1a365d,#2b6cb0)",
-        padding:"14px 16px", position:"sticky", top:0, zIndex:50,
+        padding:"calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 14px calc(16px + env(safe-area-inset-left, 0px))", position:"sticky", top:0, zIndex:50,
         boxShadow:"0 2px 8px #00000022",
       }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
