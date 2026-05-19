@@ -1230,7 +1230,7 @@ export default function App() {
             <img src="/icon-512.png" alt="MCS" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
             <div style={{ minWidth:0 }}>
               <h1 style={{ fontSize:16, fontWeight:700, margin:0, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Controle de Prazos</h1>
-              <div style={{ fontSize:10, color:"#bee3f8cc", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:14, display:"block", marginTop:2, filter:"brightness(0) invert(1)", opacity:0.9 }} /></div>
+              <div style={{ fontSize:10, color:"#bee3f8cc", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:28, display:"block", marginTop:0, filter:"brightness(0) invert(1)", opacity:0.9 }} /></div>
             </div>
           </div>
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
