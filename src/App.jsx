@@ -955,7 +955,7 @@ function TelaLogin({ T, modo, onToast }) {
       <div style={{ background:T.card, borderRadius:20, padding:"32px 28px", maxWidth:400, width:"100%", boxShadow:"0 20px 60px #00000022", border:`1px solid ${T.border}` }}>
         <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ background:T.primary, width:60, height:60, borderRadius:"50%", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:12 }}>
-            <Icon name="scale" size={30} color="#fff" />
+            <img src="/icon-512.png" alt="MCS" style={{ width:54, height:54, borderRadius:"50%", objectFit:"cover" }} />
           </div>
           <h1 style={{ margin:0, fontSize:20, fontWeight:700, color:T.text }}>Controle de Prazos</h1>
           <div style={{ fontSize:12, color:T.textMuted, marginTop:4 }}>Martins, Corrêa da Silva Advogados</div>
@@ -1227,7 +1227,7 @@ export default function App() {
       }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-            <Icon name="scale" size={24} color="#fff" />
+            <img src="/icon-512.png" alt="MCS" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
             <div style={{ minWidth:0 }}>
               <h1 style={{ fontSize:16, fontWeight:700, margin:0, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Controle de Prazos</h1>
               <div style={{ fontSize:10, color:"#bee3f8cc", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Martins, Corrêa da Silva Advogados</div>
