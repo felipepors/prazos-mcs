@@ -1028,6 +1028,7 @@ export default function App() {
   const [ordenacao, setOrdenacao]       = useState("data_asc");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
+  const [filtroTarefa, setFiltroTarefa] = useState("todas");
   const [aba, setAba]                   = useState("lista");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [menuMobile, setMenuMobile]     = useState(false);
@@ -1399,24 +1400,70 @@ export default function App() {
       {aba === "calendario" && <Calendario prazos={prazosComStatus} onEdit={openEdit} onNovoData={openNovo} feriadosNomes={feriadosNomes} T={T} modo={modo} onToast={toast} />}
 
       {/* ══ ABA TAREFAS ══ */}
-      {aba === "tarefas" && (
-        <div style={{ padding:"16px 16px 80px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <div>
-              <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:T.text }}>Tarefas</h2>
-              <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>{tarefas.filter(t=>!t.concluida).length} pendente(s) · arraste para reordenar</div>
+      {aba === "tarefas" && (() => {
+        const contTar = {
+          todas:      tarefas.length,
+          alta:       tarefas.filter(t => (t.prioridade||"media") === "alta" && !t.concluida).length,
+          media:      tarefas.filter(t => (t.prioridade||"media") === "media" && !t.concluida).length,
+          baixa:      tarefas.filter(t => (t.prioridade||"media") === "baixa" && !t.concluida).length,
+          concluidas: tarefas.filter(t => t.concluida).length,
+        };
+        const tarefasFiltradas = tarefas.filter(t => {
+          if (filtroTarefa === "todas")      return true;
+          if (filtroTarefa === "concluidas") return t.concluida;
+          return (t.prioridade||"media") === filtroTarefa && !t.concluida;
+        });
+        return (
+          <div style={{ padding:"16px 16px 80px" }}>
+            <div style={{ marginBottom:14 }}>
+              <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Tarefas</h2>
+              <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>{tarefas.filter(t=>!t.concluida).length} pendente(s) · arraste para reordenar</div>
             </div>
+            {/* Cards de contadores */}
+            <div style={{ overflowX:"auto", display:"flex", gap:10, marginBottom:14, paddingBottom:4 }} className="hide-scrollbar">
+              {[
+                { key:"todas",      label:"Total",  cor:T.primary },
+                { key:"alta",       label:"Alta",   cor:PRIO_CFG.alta[modo].c },
+                { key:"media",      label:"Média",  cor:PRIO_CFG.media[modo].c },
+                { key:"baixa",      label:"Baixa",  cor:PRIO_CFG.baixa[modo].c },
+                { key:"concluidas", label:"Feitas", cor:STATUS_CFG.concluido[modo].c },
+              ].map(({ key, label, cor }) => {
+                const ativo = filtroTarefa === key;
+                return (
+                  <button key={key} onClick={() => setFiltroTarefa(key)}
+                    style={{
+                      background: ativo ? cor+"15" : T.card,
+                      border: "1.5px solid " + (ativo ? cor : T.border),
+                      borderRadius:14, padding:"12px 16px", cursor:"pointer", textAlign:"left",
+                      minWidth:92, flexShrink:0,
+                      boxShadow: ativo ? "0 4px 16px " + cor + "22" : T.shadowSm,
+                      transition:"all 0.15s",
+                      transform: ativo ? "translateY(-2px)" : "translateY(0)",
+                    }}>
+                    <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
+                    <div style={{ fontSize:24, fontWeight:800, color:cor, lineHeight:1, letterSpacing:"-0.02em" }}>{contTar[key]}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {filtroTarefa !== "todas" && (
+              <div style={{ fontSize:11, color:T.textMuted, display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                {tarefasFiltradas.length} resultado(s)
+                <button onClick={() => setFiltroTarefa("todas")}
+                  style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                  Limpar
+                </button>
+              </div>
+            )}
+            <ListaTarefas tarefas={tarefasFiltradas} setTarefas={setTarefas} T={T} modo={modo}
+              onEdit={t => { setTarefaForm({...t}); setTarefaEditId(t.id); setTarefaModal(true); }}
+              onDelete={id => { setTarefas(prev => prev.filter(x => x.id !== id)); toast("Tarefa excluída","danger"); }}
+              onToggle={id => { setTarefas(prev => prev.map(x => x.id===id?{...x,concluida:!x.concluida}:x)); toast("Tarefa atualizada","success"); }}
+            />
           </div>
-          <ListaTarefas
-            tarefas={tarefas} setTarefas={setTarefas} T={T} modo={modo}
-            onEdit={t => { setTarefaForm({...t}); setTarefaEditId(t.id); setTarefaModal(true); }}
-            onDelete={id => { setTarefas(prev => prev.filter(x => x.id !== id)); toast("Tarefa excluída","danger"); }}
-            onToggle={id => { setTarefas(prev => prev.map(x => x.id===id?{...x,concluida:!x.concluida}:x)); toast("Tarefa atualizada","success"); }}
-          />
-        </div>
-      )}
+        );
+      })()}
 
-      {/* ── FAB FLUTUANTE ── */}
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
