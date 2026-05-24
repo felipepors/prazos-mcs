@@ -989,6 +989,483 @@ function TelaLogin({ T, modo, onToast }) {
   );
 }
 
+// ── Constantes do painel DJEN ────────────────────────────────────────────────
+const STATUS_DJEN = {
+  NOVO:        { label:"Novo",          cor:"#2b6cb0", bg:"#ebf8ff" },
+  EM_ANALISE:  { label:"Em análise",    cor:"#c9892e", bg:"#fefcbf" },
+  CONTATADO:   { label:"Contatado",     cor:"#5c6b3a", bg:"#e6efd9" },
+  PROMOVIDO:   { label:"Promovido",     cor:"#2c5282", bg:"#d3ddf0" },
+  DESCARTADO:  { label:"Descartado",    cor:"#718096", bg:"#edf2f7" },
+};
+
+const COR_GATILHO = {
+  G1_TUTELA_DEFERIDA:        { cor:"#5c6b3a", bg:"rgba(92,107,58,0.15)",  label:"G1·Tutela deferida"   },
+  G2_INTIMACAO_CUMPRIMENTO:  { cor:"#c9892e", bg:"rgba(201,137,46,0.18)", label:"G2·Intimação"         },
+  G3_DESCUMPRIMENTO:         { cor:"#b8412e", bg:"rgba(184,65,46,0.15)",  label:"G3·Descumprimento"    },
+  G4_ORCAMENTOS:             { cor:"#b8941f", bg:"rgba(184,148,31,0.18)", label:"G4·Orçamentos"        },
+  G5_TUTELA_INDEFERIDA:      { cor:"#6b6b6b", bg:"rgba(107,107,107,0.13)",label:"G5·Tutela indeferida" },
+};
+
+// Regex idênticas ao monitor_djen.py — para destacar trechos relevantes
+const GATILHOS_REGEX_MCS = {
+  G1_TUTELA_DEFERIDA: [
+    /\b(defiro|defere|deferiu|deferimos|deferida|deferido|deferir)\b.{0,120}\b(tutela|liminar|antecipa[çc][ãa]o)\b/gis,
+    /\b(tutela|liminar|antecipa[çc][ãa]o)\b.{0,80}\b(defiro|defere|deferiu|deferimos|deferida|deferido)\b/gis,
+    /\b(concedo|concede|concedeu|concedida|concedido|conceder)\b.{0,80}\b(tutela|liminar)\b/gis,
+    /\b(determino|determinou|determine-se)\b.{0,120}\b(fornecimento|forne[cç]a|forne[cç]er|custear|custeio|custeie)\b/gis,
+  ],
+  G2_INTIMACAO_CUMPRIMENTO: [
+    /\bintim[ae].{0,60}cumprimento\b/gis,
+    /\bintim[ae].{0,80}\bplano\b/gis,
+    /\bintim[ae].{0,80}(estado|munic[íi]pio|uni[aã]o)\b/gis,
+    /\bcumpra-se\b/gis,
+  ],
+  G3_DESCUMPRIMENTO: [
+    /\bdescumprimento\b/gi, /\bn[aã]o\s+cumpr[io]\b/gi, /\bdeixou\s+de\s+cumprir\b/gi,
+    /\bsisbajud\b/gi, /\bfalta\s+do\s+medicamento\b/gi, /\bn[aã]o\s+disponibilizou\b/gi,
+  ],
+  G4_ORCAMENTOS: [
+    /\bor[çc]amento[s]?\b.{0,80}\b(medicament|f[áa]rmac|f[óo]rmul|forneciment|aquisi[çc][ãa]o|compra|menor\s+pre[çc]o)\b/gis,
+    /\btr[êe]s\s+or[çc]amentos\b/gi,
+  ],
+  G5_TUTELA_INDEFERIDA: [
+    /\b(indefiro|indefere|indeferiu|indeferida|indeferido|indeferir)\b.{0,80}\b(tutela|liminar|antecipa[çc][ãa]o)\b/gis,
+  ],
+};
+
+
+// ── Hook que sincroniza a tabela publicacoes_djen com o Supabase ─────────────
+function usePublicacoesDjen() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Carregar inicial + assinar realtime
+  useEffect(() => {
+    let alive = true;
+    let channel = null;
+
+    (async () => {
+      const sb = await initSupabase();
+      if (!alive || !sb || !_userId) { setLoading(false); return; }
+      
+      const { data, error } = await sb
+        .from("publicacoes_djen")
+        .select("*")
+        .eq("user_id", _userId)
+        .order("data_publicacao", { ascending:false })
+        .order("enviado_em", { ascending:false });
+      
+      if (!alive) return;
+      if (error) { console.error("Erro carregando DJEN:", error); setLoading(false); return; }
+      setItems(data || []);
+      setLoading(false);
+
+      // Realtime: atualiza automaticamente quando o dashboard envia
+      channel = sb.channel("djen-" + _userId)
+        .on("postgres_changes",
+            { event:"*", schema:"public", table:"publicacoes_djen", filter:"user_id=eq."+_userId },
+            payload => {
+              if (!alive) return;
+              setItems(prev => {
+                if (payload.eventType === "INSERT") {
+                  if (prev.some(p => p.id === payload.new.id)) return prev;
+                  return [payload.new, ...prev];
+                }
+                if (payload.eventType === "UPDATE") {
+                  return prev.map(p => p.id === payload.new.id ? payload.new : p);
+                }
+                if (payload.eventType === "DELETE") {
+                  return prev.filter(p => p.id !== payload.old.id);
+                }
+                return prev;
+              });
+            })
+        .subscribe();
+    })();
+
+    return () => {
+      alive = false;
+      if (channel && _sb) { try { _sb.removeChannel(channel); } catch(e) {} }
+    };
+  }, []);
+
+  const atualizarStatus = async (id, novoStatus, observacao) => {
+    const sb = _sb;
+    if (!sb) return;
+    const patch = { status: novoStatus };
+    if (observacao !== undefined) patch.observacao = observacao;
+    const { error } = await sb.from("publicacoes_djen").update(patch).eq("id", id);
+    if (error) console.error("Erro atualizando status:", error);
+    // optimistic update — realtime confirma depois
+    setItems(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  };
+
+  const remover = async (id) => {
+    const sb = _sb;
+    if (!sb) return;
+    const { error } = await sb.from("publicacoes_djen").delete().eq("id", id);
+    if (error) console.error("Erro removendo:", error);
+    setItems(prev => prev.filter(p => p.id !== id));
+  };
+
+  return { items, loading, atualizarStatus, remover };
+}
+
+
+// ── Renderiza texto com destaque dos gatilhos (mesma lógica do dashboard) ────
+function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
+  if (!texto) return null;
+  const ranges = [];
+  const gats = (gatilhosStr || "").split(";").map(s => s.trim()).filter(Boolean);
+
+  gats.forEach(g => {
+    const conf = COR_GATILHO[g];
+    if (!conf) return;
+    const regexes = GATILHOS_REGEX_MCS[g] || [];
+    regexes.forEach(re => {
+      const r = new RegExp(re.source, re.flags);
+      let m;
+      while ((m = r.exec(texto)) !== null) {
+        ranges.push({ start: m.index, end: m.index + m[0].length, ...conf });
+        if (m.index === r.lastIndex) r.lastIndex++;
+      }
+    });
+  });
+
+  const meds = (medicamentosStr || "").split(";")
+    .map(s => s.trim().replace(/\([^)]*\)/g,"").trim())
+    .filter(s => s.length >= 4);
+  meds.forEach(med => {
+    const escaped = med.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("\\b" + escaped + "\\b", "gi");
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+      ranges.push({ start: m.index, end: m.index + m[0].length,
+                    cor:"#1b2a4a", bg:"rgba(27,42,74,0.10)", label:"Medicamento" });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+  });
+
+  if (ranges.length === 0) return <span>{texto}</span>;
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end);
+  const merged = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start < last.end) {
+      if (r.end > last.end) last.end = r.end;
+    } else merged.push({ ...r });
+  }
+
+  const parts = [];
+  let cursor = 0;
+  merged.forEach((r, i) => {
+    if (cursor < r.start) parts.push(<span key={"p"+i}>{texto.substring(cursor, r.start)}</span>);
+    parts.push(
+      <mark key={"m"+i} title={r.label}
+            style={{ background:r.bg, color:r.cor, padding:"1px 3px", borderRadius:2,
+                     borderBottom:`2px solid ${r.cor}`, fontWeight:500 }}>
+        {texto.substring(r.start, r.end)}
+      </mark>
+    );
+    cursor = r.end;
+  });
+  if (cursor < texto.length) parts.push(<span key="end">{texto.substring(cursor)}</span>);
+  return <>{parts}</>;
+}
+
+
+// ── Painel principal da aba DJEN ─────────────────────────────────────────────
+function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
+  const { items, loading, atualizarStatus, remover } = usePublicacoesDjen();
+  const [detalhe, setDetalhe] = useState(null);
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroTribunal, setFiltroTribunal] = useState("");
+  const [filtroPrio, setFiltroPrio] = useState("");
+  const [busca, setBusca] = useState("");
+
+  const tribunaisUnicos = useMemo(() => {
+    return [...new Set(items.map(i => i.tribunal).filter(Boolean))].sort();
+  }, [items]);
+
+  const filtrados = useMemo(() => {
+    return items.filter(i => {
+      if (filtroStatus && i.status !== filtroStatus) return false;
+      if (filtroTribunal && i.tribunal !== filtroTribunal) return false;
+      if (filtroPrio && String(i.prioridade) !== filtroPrio) return false;
+      if (busca) {
+        const b = busca.toLowerCase();
+        const hay = [i.numero_processo, i.medicamentos, i.gatilhos, i.observacao, i.tribunal, i.texto_publicacao]
+          .filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(b)) return false;
+      }
+      return true;
+    });
+  }, [items, filtroStatus, filtroTribunal, filtroPrio, busca]);
+
+  // Contadores por status (para os cards)
+  const counts = useMemo(() => {
+    const c = { NOVO:0, EM_ANALISE:0, CONTATADO:0, PROMOVIDO:0, DESCARTADO:0 };
+    items.forEach(i => { c[i.status] = (c[i.status]||0) + 1; });
+    return c;
+  }, [items]);
+
+  // Promover a Prazo: abre o formulário de novo prazo já preenchido
+  const promoverPrazo = (pub) => {
+    const dataLimite = new Date(Date.now() + 5*86400000).toISOString().slice(0,10);
+    setForm({
+      processo: pub.numero_processo || "",
+      parte: "",  // você preenche
+      tipo: "Manifestação",
+      dataLimite,
+      responsavel: "Felipe",
+      obs: `📡 Captado do DJEN — ${pub.data_publicacao || ""}\nGatilhos: ${pub.gatilhos || ""}\nMedicamentos: ${pub.medicamentos || ""}\n${pub.observacao || ""}`.trim(),
+      concluido: false,
+      prioridade: pub.prioridade === 1 ? "alta" : (pub.prioridade === 2 ? "media" : "baixa"),
+      modoData: "final",
+    });
+    setModal("novo");
+    setAba("lista");
+    atualizarStatus(pub.id, "PROMOVIDO");
+    setDetalhe(null);
+    toast("Publicação promovida — confira o formulário","success");
+  };
+
+  // Estilos base
+  const INP = { background:T.bg, color:T.text, border:`1px solid ${T.border}`, borderRadius:6, padding:"7px 10px", fontSize:13, outline:"none" };
+  const BTN = { padding:"6px 12px", borderRadius:6, fontSize:12, fontWeight:600, border:"none", cursor:"pointer" };
+  const BTN_GHOST = { ...BTN, background:"transparent", color:T.text, border:`1px solid ${T.border}` };
+
+  if (loading) {
+    return (
+      <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:14 }}>
+        Carregando publicações DJEN...
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Cards de status */}
+      <div style={{ padding:"14px 16px 0", overflowX:"auto", display:"flex", gap:8, scrollbarWidth:"none" }}>
+        {[
+          { key:"",          label:"Todos",       cor:T.primary, n: items.length },
+          { key:"NOVO",      label:"Novo",        cor:STATUS_DJEN.NOVO.cor,       n: counts.NOVO },
+          { key:"EM_ANALISE",label:"Em análise",  cor:STATUS_DJEN.EM_ANALISE.cor, n: counts.EM_ANALISE },
+          { key:"CONTATADO", label:"Contatado",   cor:STATUS_DJEN.CONTATADO.cor,  n: counts.CONTATADO },
+          { key:"PROMOVIDO", label:"Promovido",   cor:STATUS_DJEN.PROMOVIDO.cor,  n: counts.PROMOVIDO },
+          { key:"DESCARTADO",label:"Descartado",  cor:STATUS_DJEN.DESCARTADO.cor, n: counts.DESCARTADO },
+        ].map(({ key, label, cor, n }) => (
+          <button key={key||"all"} onClick={() => setFiltroStatus(key)}
+            style={{
+              flex:"0 0 auto", background: filtroStatus===key ? cor : T.card,
+              color: filtroStatus===key ? "#fff" : T.text,
+              border:`1px solid ${filtroStatus===key ? cor : T.border}`,
+              borderRadius:8, padding:"8px 14px", cursor:"pointer",
+              display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2,
+              minWidth:80,
+            }}>
+            <span style={{ fontSize:10, fontWeight:500, opacity:0.85, letterSpacing:"0.06em", textTransform:"uppercase" }}>{label}</span>
+            <span style={{ fontSize:18, fontWeight:700 }}>{n}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{ padding:"14px 16px", display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+        <input value={busca} onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar processo, medicamento, texto..."
+          style={{ ...INP, flex:"1 1 200px", minWidth:160 }} />
+        <select value={filtroTribunal} onChange={e => setFiltroTribunal(e.target.value)} style={{ ...INP, flex:"0 0 130px" }}>
+          <option value="">Todos tribunais</option>
+          {tribunaisUnicos.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filtroPrio} onChange={e => setFiltroPrio(e.target.value)} style={{ ...INP, flex:"0 0 110px" }}>
+          <option value="">Todas prio.</option>
+          <option value="1">P1 Alta</option>
+          <option value="2">P2 Média</option>
+          <option value="9">P9 Baixa</option>
+        </select>
+      </div>
+
+      {/* Lista */}
+      {filtrados.length === 0 ? (
+        <div style={{ padding:60, textAlign:"center", color:T.textMuted, fontSize:13 }}>
+          {items.length === 0
+            ? "Nenhuma publicação enviada do dashboard ainda."
+            : "Nenhuma publicação corresponde aos filtros."}
+          {items.length === 0 && (
+            <div style={{ marginTop:14, fontSize:11, color:T.textMuted }}>
+              Use o botão "Enviar para MCS Prazos" no dashboard local para começar.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ padding:"0 16px 80px", display:"flex", flexDirection:"column", gap:8 }}>
+          {filtrados.map(p => {
+            const stCfg = STATUS_DJEN[p.status] || STATUS_DJEN.NOVO;
+            const gatList = (p.gatilhos||"").split(";").map(g=>g.trim()).filter(Boolean);
+            return (
+              <div key={p.id}
+                onClick={() => setDetalhe(p)}
+                style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:8,
+                         padding:"12px 14px", cursor:"pointer", display:"flex",
+                         flexDirection:"column", gap:6,
+                         borderLeft:`4px solid ${stCfg.cor}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color:T.text }}>
+                      {p.numero_processo || "—"}
+                    </span>
+                    <span style={{ background:T.text, color:T.card, padding:"2px 7px", borderRadius:3,
+                                   fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:"0.06em" }}>
+                      {p.tribunal || "—"}
+                    </span>
+                    <span style={{ border:`1px solid ${p.prioridade===1?"#b8412e":p.prioridade===2?"#c9892e":"#6b6b6b"}`,
+                                   color:p.prioridade===1?"#b8412e":p.prioridade===2?"#c9892e":"#6b6b6b",
+                                   padding:"1px 7px", borderRadius:3, fontFamily:"monospace", fontSize:10, fontWeight:600 }}>
+                      P{p.prioridade}
+                    </span>
+                  </div>
+                  <span style={{ background:stCfg.bg, color:stCfg.cor, padding:"2px 8px",
+                                 borderRadius:10, fontSize:10, fontWeight:600, letterSpacing:"0.04em",
+                                 textTransform:"uppercase" }}>
+                    {stCfg.label}
+                  </span>
+                </div>
+                <div style={{ fontSize:12, color:T.textSoft }}>
+                  {p.medicamentos || "—"}
+                </div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {gatList.slice(0,3).map(g => {
+                    const c = COR_GATILHO[g];
+                    if (!c) return null;
+                    return (
+                      <span key={g} style={{ background:c.bg, color:c.cor, padding:"1px 6px",
+                                              borderRadius:3, fontFamily:"monospace", fontSize:9.5, fontWeight:600 }}>
+                        {c.label}
+                      </span>
+                    );
+                  })}
+                  <span style={{ marginLeft:"auto", color:T.textMuted, fontFamily:"monospace", fontSize:10 }}>
+                    {p.data_publicacao ? p.data_publicacao.split("-").reverse().join("/") : ""}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal de detalhes */}
+      {detalhe && (
+        <div onClick={() => setDetalhe(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:200,
+                   display:"flex", justifyContent:"center", alignItems:"flex-start",
+                   padding:"40px 12px 12px", overflowY:"auto" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:T.bg, color:T.text, borderRadius:10, maxWidth:760, width:"100%",
+                     boxShadow:"0 20px 60px rgba(0,0,0,0.4)", border:`1px solid ${T.border}` }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.border}`,
+                          display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:14 }}>
+              <div>
+                <div style={{ fontSize:11, color:T.textMuted, marginBottom:4, fontFamily:"monospace", letterSpacing:"0.1em" }}>
+                  PUBLICAÇÃO DJEN
+                </div>
+                <div style={{ fontSize:16, fontWeight:600, fontFamily:"monospace" }}>
+                  {detalhe.numero_processo || "—"}
+                </div>
+              </div>
+              <button onClick={() => setDetalhe(null)}
+                style={{ background:"none", border:"none", color:T.textMuted, fontSize:24, cursor:"pointer", padding:0, lineHeight:1 }}>
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding:"18px 22px" }}>
+              {/* Metadados em grid */}
+              <div style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:"8px 14px", fontSize:13, marginBottom:18 }}>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Tribunal</span>
+                <span>{detalhe.tribunal || "—"}</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Data pub.</span>
+                <span style={{ fontFamily:"monospace" }}>{detalhe.data_publicacao ? detalhe.data_publicacao.split("-").reverse().join("/") : "—"}</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Gatilhos</span>
+                <span>{(detalhe.gatilhos||"").split(";").map(g => COR_GATILHO[g.trim()]?.label || g.trim()).filter(Boolean).join(" · ") || "—"}</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Medicamentos</span>
+                <span>{detalhe.medicamentos || "—"}</span>
+                {detalhe.observacao && <>
+                  <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Obs.</span>
+                  <span style={{ whiteSpace:"pre-wrap" }}>{detalhe.observacao}</span>
+                </>}
+              </div>
+
+              {/* Texto destacado */}
+              {detalhe.texto_publicacao && (
+                <div style={{ marginBottom:18 }}>
+                  <div style={{ fontSize:10, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                    Texto da publicação
+                  </div>
+                  <div style={{ background:T.card, padding:"14px 16px", borderRadius:6,
+                                border:`1px solid ${T.border}`, maxHeight:280, overflowY:"auto",
+                                fontFamily:"Georgia, serif", fontSize:13, lineHeight:1.7,
+                                whiteSpace:"pre-wrap", textAlign:"justify" }}>
+                    {renderTextoDjen(detalhe.texto_publicacao, detalhe.gatilhos, detalhe.medicamentos)}
+                  </div>
+                </div>
+              )}
+
+              {/* Ações: mudar status */}
+              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:14 }}>
+                <div style={{ fontSize:10, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                  Workflow
+                </div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {Object.entries(STATUS_DJEN).map(([k, v]) => (
+                    <button key={k} onClick={() => atualizarStatus(detalhe.id, k)}
+                      disabled={detalhe.status === k}
+                      style={{
+                        ...BTN,
+                        background: detalhe.status === k ? v.cor : "transparent",
+                        color: detalhe.status === k ? "#fff" : v.cor,
+                        border: `1px solid ${v.cor}`,
+                        cursor: detalhe.status === k ? "default" : "pointer",
+                        opacity: detalhe.status === k ? 1 : 0.85,
+                      }}>
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ações finais */}
+              <div style={{ marginTop:18, display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                <button onClick={() => {
+                    if (confirm("Apagar esta publicação permanentemente?")) {
+                      remover(detalhe.id);
+                      setDetalhe(null);
+                      toast("Publicação apagada","danger");
+                    }
+                  }}
+                  style={{ ...BTN_GHOST, color:"#b8412e", borderColor:"#b8412e" }}>
+                  Apagar
+                </button>
+                <button onClick={() => navigator.clipboard.writeText(detalhe.numero_processo || "")}
+                  style={BTN_GHOST}>
+                  Copiar nº
+                </button>
+                <button onClick={() => promoverPrazo(detalhe)}
+                  style={{ ...BTN, background:T.primary, color:"#fff" }}>
+                  Promover a Prazo →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
 export default function App() {
   // Tema
   const [modo, setModo] = useStorage("mcs.modo", "light");
@@ -1269,6 +1746,7 @@ export default function App() {
           { key:"lista",      label:"Prazos",     ico:"list" },
           { key:"calendario", label:"Calendário", ico:"calendar" },
           { key:"tarefas",    label:"Tarefas",    ico:"check" },
+          { key:"djen",       label:"DJEN",       ico:"flag" },
         ].map(({ key, label, ico }) => (
           <button key={key} onClick={() => setAba(key)}
             style={{
@@ -1463,6 +1941,11 @@ export default function App() {
           </div>
         );
       })()}
+
+            {aba === "djen" && (
+        <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} setAba={setAba}
+                    setForm={setForm} setModal={setModal} toast={toast} />
+      )}
 
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
