@@ -1100,6 +1100,14 @@ function usePublicacoesDjen() {
     setItems(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
   };
 
+  const atualizarAcompanhar = async (id, valor) => {
+    const sb = _sb;
+    if (!sb) return;
+    const { error } = await sb.from("publicacoes_djen").update({ acompanhar: valor }).eq("id", id);
+    if (error) console.error("Erro atualizando acompanhar:", error);
+    setItems(prev => prev.map(p => p.id === id ? { ...p, acompanhar: valor } : p));
+  };
+
   const remover = async (id) => {
     const sb = _sb;
     if (!sb) return;
@@ -1108,7 +1116,7 @@ function usePublicacoesDjen() {
     setItems(prev => prev.filter(p => p.id !== id));
   };
 
-  return { items, loading, atualizarStatus, remover };
+  return { items, loading, atualizarStatus, atualizarAcompanhar, remover };
 }
 
 
@@ -1176,7 +1184,7 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
 function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
-  const { items, loading, atualizarStatus, remover } = usePublicacoesDjen();
+  const { items, loading, atualizarStatus, atualizarAcompanhar, remover } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTribunal, setFiltroTribunal] = useState("");
@@ -1313,6 +1321,13 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
                          borderLeft:`4px solid ${stCfg.cor}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    {p.acompanhar && (
+                      <span title="Processo sob acompanhamento contínuo no DJEN"
+                        style={{ background:"#5c6b3a", color:"#fff", padding:"2px 7px", borderRadius:3,
+                                 fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
+                        🔔 ACOMP
+                      </span>
+                    )}
                     <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color:T.text }}>
                       {p.numero_processo || "—"}
                     </span>
@@ -1412,6 +1427,26 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
                   </div>
                 </div>
               )}
+
+              {/* Acompanhamento contínuo no DJEN */}
+              <div style={{ background:T.card, padding:"12px 14px", borderRadius:6,
+                            border:`1px solid ${T.border}`, marginBottom:14 }}>
+                <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
+                  <input type="checkbox"
+                    checked={!!detalhe.acompanhar}
+                    onChange={(e) => atualizarAcompanhar(detalhe.id, e.target.checked)}
+                    style={{ marginTop:3, accentColor:T.primary, cursor:"pointer" }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:T.text }}>
+                      Acompanhar este processo no DJEN
+                    </div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginTop:3, lineHeight:1.5 }}>
+                      O monitor passa a buscar TODAS as movimentações deste processo, mesmo as não-oncológicas.
+                      Você recebe alerta no e-mail quando houver novidade.
+                    </div>
+                  </div>
+                </label>
+              </div>
 
               {/* Ações: mudar status */}
               <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:14 }}>
