@@ -1116,7 +1116,27 @@ function usePublicacoesDjen() {
     setItems(prev => prev.filter(p => p.id !== id));
   };
 
-  return { items, loading, atualizarStatus, atualizarAcompanhar, remover };
+  const adicionarProcessoManual = async ({ numero_processo, tribunal, observacao }) => {
+    const sb = _sb;
+    if (!sb || !_userId) return { error: "Nao autenticado" };
+    const id_djen = "manual_" + Date.now();
+    const payload = {
+      user_id: _userId, id_djen,
+      numero_processo: numero_processo.trim(),
+      tribunal: tribunal ? tribunal.trim() : null,
+      observacao: observacao ? observacao.trim() : null,
+      acompanhar: true, status: "NOVO", prioridade: 5,
+      data_publicacao: new Date().toISOString().slice(0, 10),
+      gatilhos: "", medicamentos: "",
+      texto_publicacao: "Processo adicionado manualmente para acompanhamento no DJEN.",
+    };
+    const { data, error } = await sb.from("publicacoes_djen").insert(payload).select().single();
+    if (error) { console.error("Erro inserindo:", error); return { error }; }
+    setItems(prev => prev.some(p => p.id === data.id) ? prev : [data, ...prev]);
+    return { data };
+  };
+
+  return { items, loading, atualizarStatus, atualizarAcompanhar, remover, adicionarProcessoManual };
 }
 
 
@@ -1184,12 +1204,15 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
 function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
-  const { items, loading, atualizarStatus, atualizarAcompanhar, remover } = usePublicacoesDjen();
+  const { items, loading, atualizarStatus, atualizarAcompanhar, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTribunal, setFiltroTribunal] = useState("");
   const [filtroPrio, setFiltroPrio] = useState("");
   const [busca, setBusca] = useState("");
+  const [modalNovoProcesso, setModalNovoProcesso] = useState(false);
+  const [formNovoProcesso, setFormNovoProcesso] = useState({ numero_processo:"", tribunal:"", observacao:"" });
+  const [salvandoNovoProcesso, setSalvandoNovoProcesso] = useState(false);
 
   const tribunaisUnicos = useMemo(() => {
     return [...new Set(items.map(i => i.tribunal).filter(Boolean))].sort();
@@ -1293,6 +1316,10 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
           <option value="2">P2 Média</option>
           <option value="9">P9 Baixa</option>
         </select>
+        <button onClick={() => { setFormNovoProcesso({ numero_processo:"", tribunal:"", observacao:"" }); setModalNovoProcesso(true); }}
+          style={{ background:T.primary, color:"#fff", border:"none", borderRadius:6, padding:"7px 13px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+          + Adicionar processo
+        </button>
       </div>
 
       {/* Lista */}
@@ -1326,6 +1353,12 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
                         style={{ background:"#5c6b3a", color:"#fff", padding:"2px 7px", borderRadius:3,
                                  fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
                         🔔 ACOMP
+                      </span>
+                    )}
+                    {(p.id_djen||"").startsWith("manual_") && (
+                      <span title="Processo adicionado manualmente"
+                        style={{ background:"#744210", color:"#fefcbf", padding:"2px 7px", borderRadius:3, fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
+                        MANUAL
                       </span>
                     )}
                     <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color:T.text }}>
@@ -1492,6 +1525,60 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
                   Promover a Prazo →
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalNovoProcesso && (
+        <div onClick={() => setModalNovoProcesso(false)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:300, display:"flex", justifyContent:"center", alignItems:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:T.bg, color:T.text, borderRadius:12, maxWidth:480, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.4)", border:`1px solid ${T.border}` }}>
+            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Adicionar processo para acompanhamento</div>
+                <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2a passada diaria.</div>
+              </div>
+              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"none", border:"none", color:T.textMuted, fontSize:22, cursor:"pointer", padding:0 }}>x</button>
+            </div>
+            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+              <label>
+                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Numero do processo *</span>
+                <input autoFocus value={formNovoProcesso.numero_processo}
+                  onChange={e => setFormNovoProcesso(f => ({ ...f, numero_processo: mascararProcesso(e.target.value) }))}
+                  placeholder="0000000-00.0000.0.00.0000"
+                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"monospace", outline:"none", width:"100%", boxSizing:"border-box" }} />
+              </label>
+              <label>
+                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Tribunal (opcional)</span>
+                <select value={formNovoProcesso.tribunal} onChange={e => setFormNovoProcesso(f => ({ ...f, tribunal: e.target.value }))}
+                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" }}>
+                  <option value="">Qualquer tribunal</option>
+                  {["TJAL","TJAM","TJCE","TJES","TJGO","TJMA","TJMG","TJMT","TJPA","TJRS","TJSP"].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+              <label>
+                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observacao (opcional)</span>
+                <textarea value={formNovoProcesso.observacao} onChange={e => setFormNovoProcesso(f => ({ ...f, observacao: e.target.value }))}
+                  rows={2} placeholder="Ex: Cliente atual..."
+                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box", resize:"vertical" }} />
+              </label>
+            </div>
+            <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 16px", color:T.textSoft, cursor:"pointer", fontSize:13 }}>Cancelar</button>
+              <button disabled={!formNovoProcesso.numero_processo.trim() || salvandoNovoProcesso}
+                onClick={async () => {
+                  if (!formNovoProcesso.numero_processo.trim()) return;
+                  setSalvandoNovoProcesso(true);
+                  const result = await adicionarProcessoManual(formNovoProcesso);
+                  setSalvandoNovoProcesso(false);
+                  if (result.error) { toast("Erro ao salvar. Tente novamente.","danger"); }
+                  else { setModalNovoProcesso(false); toast("Processo adicionado para acompanhamento","success"); }
+                }}
+                style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", opacity:(!formNovoProcesso.numero_processo.trim()||salvandoNovoProcesso)?0.5:1 }}>
+                {salvandoNovoProcesso ? "Salvando..." : "Adicionar e acompanhar"}
+              </button>
             </div>
           </div>
         </div>
