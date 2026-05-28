@@ -1203,7 +1203,7 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
-function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
+function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irParaPrazo }) {
   const { items, loading, atualizarStatus, atualizarAcompanhar, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
   const [filtroStatus, setFiltroStatus] = useState("");
@@ -1253,6 +1253,8 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
       concluido: false,
       prioridade: pub.prioridade === 1 ? "alta" : (pub.prioridade === 2 ? "media" : "baixa"),
       modoData: "final",
+      djenId: pub.id,
+      djenAcompanhar: !!pub.acompanhar,
     });
     setModal("novo");
     setAba("lista");
@@ -1361,7 +1363,10 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
                         MANUAL
                       </span>
                     )}
-                    <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color:T.text }}>
+                    <span
+                      onClick={e => { e.stopPropagation(); if (p.numero_processo && irParaPrazo) irParaPrazo(p.numero_processo); }}
+                      title={p.numero_processo ? "Ver na aba Prazos" : ""}
+                      style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color: p.numero_processo && irParaPrazo ? T.primary : T.text, cursor: p.numero_processo && irParaPrazo ? "pointer" : "default", textDecoration: p.numero_processo && irParaPrazo ? "underline" : "none", textUnderlineOffset:2 }}>
                       {p.numero_processo || "—"}
                     </span>
                     <span style={{ background:T.text, color:T.card, padding:"2px 7px", borderRadius:3,
@@ -1624,6 +1629,7 @@ export default function App() {
   // Estados UI
   const [filtro, setFiltro]             = useState("todos");
   const [busca, setBusca]               = useState("");
+  const [buscaPrazos, setBuscaPrazos]   = useState(""); // navegação cruzada DJEN→Prazos
   const [ordenacao, setOrdenacao]       = useState("data_asc");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
@@ -1965,6 +1971,11 @@ export default function App() {
             {lista.map(p => {
               const st = STATUS_CFG[p.status][modo];
               const du = diasUteisRestantes(p.dataLimite);
+              // Extrair info DJEN da obs quando captado do monitor
+              const isDjen = p.djenId || (p.obs && p.obs.includes("Captado do DJEN"));
+              const djenInfoMatch = isDjen && p.obs ? p.obs.match(/Captado do DJEN[^—\n]*[—\-]\s*([\d-]+)/) : null;
+              const djenGatilho = isDjen && p.obs ? (p.obs.match(/Gatilhos:\s*([^\n]+)/) || [])[1] : null;
+              const djenMed = isDjen && p.obs ? (p.obs.match(/Medicamentos:\s*([^\n]+)/) || [])[1] : null;
               return (
                 <div key={p.id} style={{
                   background:T.card, border:`1px solid ${T.border}`,
@@ -1986,7 +1997,36 @@ export default function App() {
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
                     </div>
-                    {p.obs && <div style={{ fontSize:11, color:T.textSoft, marginTop:4, fontStyle:"italic" }}>{p.obs}</div>}
+                    {/* Info DJEN compacta */}
+                    {isDjen && (djenGatilho || djenMed) && (
+                      <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:10, color:"#5c6b3a", background:"rgba(92,107,58,0.12)", padding:"1px 7px", borderRadius:3, fontWeight:600 }}>📡 DJEN</span>
+                        {djenGatilho && <span style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace" }}>{djenGatilho.replace(/G[0-9]_/g, "")}</span>}
+                        {djenMed && <span style={{ fontSize:10, color:T.textMuted }}>{djenMed}</span>}
+                      </div>
+                    )}
+                    {/* Toggle Monitorar no DJEN */}
+                    {p.djenId && (
+                      <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6 }}>
+                        <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}
+                          onClick={e => e.stopPropagation()}>
+                          <input type="checkbox"
+                            checked={!!p.djenAcompanhar}
+                            onChange={async (e) => {
+                              const novoVal = e.target.checked;
+                              setPrazos(prev => prev.map(x => x.id === p.id ? {...x, djenAcompanhar: novoVal} : x));
+                              const sb = _sb;
+                              if (sb && p.djenId) {
+                                await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("id", p.djenId);
+                              }
+                              toast(novoVal ? "Monitoramento ativado" : "Monitoramento desativado", "success");
+                            }}
+                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:13, height:13 }} />
+                          <span style={{ fontSize:10, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
+                        </label>
+                      </div>
+                    )}
+                    {p.obs && !isDjen && <div style={{ fontSize:11, color:T.textSoft, marginTop:4, fontStyle:"italic" }}>{p.obs}</div>}
                   </div>
                   <AcoesMenu prazo={p} onEdit={openEdit} onDelete={setConfirmDel} onToast={toast} T={T} />
                 </div>
@@ -2066,7 +2106,8 @@ export default function App() {
 
             {aba === "djen" && (
         <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} setAba={setAba}
-                    setForm={setForm} setModal={setModal} toast={toast} />
+                    setForm={setForm} setModal={setModal} toast={toast}
+                    irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
       )}
 
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
