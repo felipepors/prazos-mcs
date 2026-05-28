@@ -2005,8 +2005,8 @@ export default function App() {
                         {djenMed && <span style={{ fontSize:10, color:T.textMuted }}>{djenMed}</span>}
                       </div>
                     )}
-                    {/* Toggle Monitorar no DJEN */}
-                    {p.djenId && (
+                    {/* Toggle Monitorar no DJEN — aparece para qualquer prazo captado do DJEN */}
+                    {isDjen && (
                       <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6 }}>
                         <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}
                           onClick={e => e.stopPropagation()}>
@@ -2016,8 +2016,14 @@ export default function App() {
                               const novoVal = e.target.checked;
                               setPrazos(prev => prev.map(x => x.id === p.id ? {...x, djenAcompanhar: novoVal} : x));
                               const sb = _sb;
-                              if (sb && p.djenId) {
-                                await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("id", p.djenId);
+                              if (sb && _userId) {
+                                if (p.djenId) {
+                                  // prazo novo: tem id direto
+                                  await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("id", p.djenId);
+                                } else if (p.processo) {
+                                  // prazo antigo: busca pelo número do processo
+                                  await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("user_id", _userId).eq("numero_processo", p.processo);
+                                }
                               }
                               toast(novoVal ? "Monitoramento ativado" : "Monitoramento desativado", "success");
                             }}
