@@ -1108,6 +1108,16 @@ function usePublicacoesDjen() {
     setItems(prev => prev.map(p => p.id === id ? { ...p, acompanhar: valor } : p));
   };
 
+  const atualizarObservacao = async (id, observacao) => {
+    const sb = _sb;
+    if (!sb) return { error: "Nao autenticado" };
+    const valor = observacao && observacao.trim() ? observacao.trim() : null;
+    const { error } = await sb.from("publicacoes_djen").update({ observacao: valor }).eq("id", id);
+    if (error) { console.error("Erro atualizando observacao:", error); return { error }; }
+    setItems(prev => prev.map(p => p.id === id ? { ...p, observacao: valor } : p));
+    return { error: null };
+  };
+
   const remover = async (id) => {
     const sb = _sb;
     if (!sb) return;
@@ -1136,7 +1146,7 @@ function usePublicacoesDjen() {
     return { data };
   };
 
-  return { items, loading, atualizarStatus, atualizarAcompanhar, remover, adicionarProcessoManual };
+  return { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual };
 }
 
 
@@ -1204,8 +1214,10 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
 function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irParaPrazo }) {
-  const { items, loading, atualizarStatus, atualizarAcompanhar, remover, adicionarProcessoManual } = usePublicacoesDjen();
+  const { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
+  const [obsEdit, setObsEdit] = useState("");
+  const [salvandoObs, setSalvandoObs] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTribunal, setFiltroTribunal] = useState("");
   const [filtroPrio, setFiltroPrio] = useState("");
@@ -1213,6 +1225,23 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
   const [modalNovoProcesso, setModalNovoProcesso] = useState(false);
   const [formNovoProcesso, setFormNovoProcesso] = useState({ numero_processo:"", tribunal:"", observacao:"" });
   const [salvandoNovoProcesso, setSalvandoNovoProcesso] = useState(false);
+
+  // Carrega a observação atual no editor sempre que o modal de detalhe abre/troca
+  useEffect(() => {
+    setObsEdit(detalhe?.observacao || "");
+    setSalvandoObs(false);
+  }, [detalhe?.id]);
+
+  const salvarObservacao = async () => {
+    if (!detalhe) return;
+    setSalvandoObs(true);
+    const { error } = await atualizarObservacao(detalhe.id, obsEdit);
+    setSalvandoObs(false);
+    if (error) { toast("Erro ao salvar observação. Tente novamente.", "danger"); return; }
+    const valor = obsEdit && obsEdit.trim() ? obsEdit.trim() : null;
+    setDetalhe(d => d ? { ...d, observacao: valor } : d);
+    toast("Observação salva", "success");
+  };
 
   const tribunaisUnicos = useMemo(() => {
     return [...new Set(items.map(i => i.tribunal).filter(Boolean))].sort();
@@ -1445,10 +1474,36 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
                 <span>{(detalhe.gatilhos||"").split(";").map(g => COR_GATILHO[g.trim()]?.label || g.trim()).filter(Boolean).join(" · ") || "—"}</span>
                 <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Medicamentos</span>
                 <span>{detalhe.medicamentos || "—"}</span>
-                {detalhe.observacao && <>
-                  <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Obs.</span>
-                  <span style={{ whiteSpace:"pre-wrap" }}>{detalhe.observacao}</span>
-                </>}
+              </div>
+
+              {/* Observação editável */}
+              <div style={{ marginBottom:18 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                    Observação
+                  </div>
+                  <button onClick={salvarObservacao}
+                    disabled={salvandoObs || (obsEdit || "") === (detalhe.observacao || "")}
+                    style={{
+                      ...BTN,
+                      fontSize:11, padding:"5px 12px",
+                      background: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? "transparent" : T.primary,
+                      color: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.textMuted : "#fff",
+                      borderColor: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.border : T.primary,
+                      cursor: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? "default" : "pointer",
+                    }}>
+                    {salvandoObs ? "Salvando…" : "Salvar"}
+                  </button>
+                </div>
+                <textarea
+                  value={obsEdit}
+                  onChange={e => setObsEdit(e.target.value)}
+                  placeholder="Anotação livre — ex.: inicial protocolada em 31/05/2026, aguardando contestação…"
+                  rows={3}
+                  style={{ width:"100%", boxSizing:"border-box", background:T.card,
+                           padding:"10px 12px", borderRadius:6, border:`1px solid ${T.border}`,
+                           color:T.text, fontSize:13, lineHeight:1.6, fontFamily:"inherit",
+                           resize:"vertical" }} />
               </div>
 
               {/* Texto destacado */}
