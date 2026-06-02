@@ -1213,7 +1213,7 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
-function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irParaPrazo }) {
+function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irParaPrazo, processoAlvo, onProcessoAlvoConsumido }) {
   const { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
   const [obsEdit, setObsEdit] = useState("");
@@ -1231,6 +1231,18 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
     setObsEdit(detalhe?.observacao || "");
     setSalvandoObs(false);
   }, [detalhe?.id]);
+
+  // Navegação cruzada Prazos→DJEN: ao chegar com um processo-alvo, busca por ele
+  // e limpa os filtros para garantir que o card apareça. Depois zera o alvo no App
+  // (permite clicar de novo no mesmo processo).
+  useEffect(() => {
+    if (!processoAlvo) return;
+    setBusca(processoAlvo);
+    setFiltroStatus("");
+    setFiltroTribunal("");
+    setFiltroPrio("");
+    onProcessoAlvoConsumido && onProcessoAlvoConsumido();
+  }, [processoAlvo]);
 
   const salvarObservacao = async () => {
     if (!detalhe) return;
@@ -1685,6 +1697,7 @@ export default function App() {
   const [filtro, setFiltro]             = useState("todos");
   const [busca, setBusca]               = useState("");
   const [buscaPrazos, setBuscaPrazos]   = useState(""); // navegação cruzada DJEN→Prazos
+  const [processoAlvoDjen, setProcessoAlvoDjen] = useState(""); // navegação cruzada Prazos→DJEN
   const [ordenacao, setOrdenacao]       = useState("data_asc");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
@@ -2047,7 +2060,11 @@ export default function App() {
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
                       <span style={{ fontWeight:600, fontSize:14, color:T.text, textDecoration:p.concluido?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.parte}</span>
                     </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:4 }}>{p.tipo} · <span style={{fontFamily:"monospace"}}>{p.processo}</span></div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:4 }}>{p.tipo} · {p.processo ? (
+                      <span onClick={() => { setProcessoAlvoDjen(p.processo); setAba("djen"); }}
+                        title="Ver no DJEN"
+                        style={{ fontFamily:"monospace", color:T.primary, cursor:"pointer", textDecoration:"underline", textDecorationStyle:"dotted", textUnderlineOffset:2 }}>{p.processo}</span>
+                    ) : <span style={{fontFamily:"monospace"}}>{p.processo}</span>}</div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
@@ -2168,6 +2185,7 @@ export default function App() {
             {aba === "djen" && (
         <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} setAba={setAba}
                     setForm={setForm} setModal={setModal} toast={toast}
+                    processoAlvo={processoAlvoDjen} onProcessoAlvoConsumido={() => setProcessoAlvoDjen("")}
                     irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
       )}
 
