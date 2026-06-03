@@ -2197,7 +2197,8 @@ export default function App() {
                         }}>
                         {p.orcamentoEnviado ? "✓ Orçamento enviado" : "＋ Orçamento enviado?"}
                       </span>
-                      <span style={{ position:"relative", display:"inline-flex" }}>
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
+                        <span style={{ position:"relative", display:"inline-flex" }}>
                         <input type="date" value={p.dataEntrada || ""}
                           onClick={(e) => { e.stopPropagation(); try { e.currentTarget.showPicker(); } catch(_){} }}
                           onChange={(e) => setDataEntrada(p.id, e.target.value)}
@@ -2212,6 +2213,12 @@ export default function App() {
                         }}>
                           {p.dataEntrada ? `📌 Entrei ${fmt(p.dataEntrada)}` : "📌 Data de entrada"}
                         </span>
+                        </span>
+                        {p.dataEntrada && (
+                          <span onClick={(e) => { e.stopPropagation(); setDataEntrada(p.id, null); }}
+                            title="Remover data de entrada" role="button" aria-label="Remover data de entrada"
+                            style={{ cursor:"pointer", userSelect:"none", lineHeight:1, fontSize:13, fontWeight:700, color:T.textMuted, width:18, height:18, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999 }}>×</span>
+                        )}
                       </span>
                     </div>
                     {/* Info DJEN compacta */}
