@@ -293,36 +293,10 @@ const PRIO_CFG = {
 };
 
 const TIPOS_DEFAULT = [
-  "Acompanhar",
   "Agravo de Instrumento","Agravo Interno","Apelação","Contestação","Contrarrazões",
   "Cumprimento de Sentença","Embargos de Declaração","Impugnação","Manifestação",
   "Memorial","Prazo Geral","Recurso Especial","Recurso Extraordinário","Réplica","Tutela de Urgência"
 ];
-
-// Identifica o tribunal a partir do número CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO).
-// J = segmento (8 Estadual, 4 Federal, 5 Trabalho...); TR = código do tribunal.
-// Não armazena nada — deriva do próprio número. Retorna null se não reconhecer.
-function tribunalDoCNJ(numero) {
-  const d = String(numero || "").replace(/\D/g, "");
-  if (d.length !== 20) return null;
-  const j = d[13];
-  const tr = d.slice(14, 16);
-  const ESTADUAL = {
-    "01":"TJAC","02":"TJAL","03":"TJAP","04":"TJAM","05":"TJBA","06":"TJCE","07":"TJDFT",
-    "08":"TJES","09":"TJGO","10":"TJMA","11":"TJMT","12":"TJMS","13":"TJMG","14":"TJPA",
-    "15":"TJPB","16":"TJPR","17":"TJPE","18":"TJPI","19":"TJRJ","20":"TJRN","21":"TJRS",
-    "22":"TJRO","23":"TJRR","24":"TJSC","25":"TJSP","26":"TJSE","27":"TJTO"
-  };
-  const n = parseInt(tr, 10);
-  if (j === "8") return ESTADUAL[tr] || null;
-  if (j === "4") return (n >= 1 && n <= 6) ? "TRF" + n : "Justiça Federal";
-  if (j === "5") return (n >= 1 && n <= 24) ? "TRT" + n : "Justiça do Trabalho";
-  if (j === "6") return "TRE";
-  if (j === "1") return "STF";
-  if (j === "3") return "STJ";
-  if (j === "7") return "STM";
-  return null;
-}
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -1126,24 +1100,6 @@ function usePublicacoesDjen() {
     setItems(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
   };
 
-  const atualizarAcompanhar = async (id, valor) => {
-    const sb = _sb;
-    if (!sb) return;
-    const { error } = await sb.from("publicacoes_djen").update({ acompanhar: valor }).eq("id", id);
-    if (error) console.error("Erro atualizando acompanhar:", error);
-    setItems(prev => prev.map(p => p.id === id ? { ...p, acompanhar: valor } : p));
-  };
-
-  const atualizarObservacao = async (id, observacao) => {
-    const sb = _sb;
-    if (!sb) return { error: "Nao autenticado" };
-    const valor = observacao && observacao.trim() ? observacao.trim() : null;
-    const { error } = await sb.from("publicacoes_djen").update({ observacao: valor }).eq("id", id);
-    if (error) { console.error("Erro atualizando observacao:", error); return { error }; }
-    setItems(prev => prev.map(p => p.id === id ? { ...p, observacao: valor } : p));
-    return { error: null };
-  };
-
   const remover = async (id) => {
     const sb = _sb;
     if (!sb) return;
@@ -1152,27 +1108,7 @@ function usePublicacoesDjen() {
     setItems(prev => prev.filter(p => p.id !== id));
   };
 
-  const adicionarProcessoManual = async ({ numero_processo, tribunal, observacao }) => {
-    const sb = _sb;
-    if (!sb || !_userId) return { error: "Nao autenticado" };
-    const id_djen = "manual_" + Date.now();
-    const payload = {
-      user_id: _userId, id_djen,
-      numero_processo: numero_processo.trim(),
-      tribunal: tribunal ? tribunal.trim() : null,
-      observacao: observacao ? observacao.trim() : null,
-      acompanhar: true, status: "NOVO", prioridade: 5,
-      data_publicacao: new Date().toISOString().slice(0, 10),
-      gatilhos: "", medicamentos: "",
-      texto_publicacao: "Processo adicionado manualmente para acompanhamento no DJEN.",
-    };
-    const { data, error } = await sb.from("publicacoes_djen").insert(payload).select().single();
-    if (error) { console.error("Erro inserindo:", error); return { error }; }
-    setItems(prev => prev.some(p => p.id === data.id) ? prev : [data, ...prev]);
-    return { data };
-  };
-
-  return { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual };
+  return { items, loading, atualizarStatus, remover };
 }
 
 
@@ -1239,56 +1175,13 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
-function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toast, irParaPrazo, processoAlvo, onProcessoAlvoConsumido }) {
-  const { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual } = usePublicacoesDjen();
+function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast }) {
+  const { items, loading, atualizarStatus, remover } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
-  const [obsEdit, setObsEdit] = useState("");
-  const [salvandoObs, setSalvandoObs] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTribunal, setFiltroTribunal] = useState("");
   const [filtroPrio, setFiltroPrio] = useState("");
   const [busca, setBusca] = useState("");
-  const [modalNovoProcesso, setModalNovoProcesso] = useState(false);
-  const [formNovoProcesso, setFormNovoProcesso] = useState({ numero_processo:"", tribunal:"", observacao:"" });
-  const [salvandoNovoProcesso, setSalvandoNovoProcesso] = useState(false);
-  const [confirmApagar, setConfirmApagar] = useState(null); // { pub, vinculados }
-
-  // Prazos da aba Prazos que pertencem ao mesmo processo (casa por digitos, ignora mascara CNJ)
-  const soDig = s => (s || "").replace(/\D/g, "");
-  const prazosDoProcesso = (numero) => {
-    const alvo = soDig(numero);
-    if (!alvo) return [];
-    return (prazos || []).filter(p => soDig(p.processo) === alvo);
-  };
-
-  // Carrega a observação atual no editor sempre que o modal de detalhe abre/troca
-  useEffect(() => {
-    setObsEdit(detalhe?.observacao || "");
-    setSalvandoObs(false);
-  }, [detalhe?.id]);
-
-  // Navegação cruzada Prazos→DJEN: ao chegar com um processo-alvo, busca por ele
-  // e limpa os filtros para garantir que o card apareça. Depois zera o alvo no App
-  // (permite clicar de novo no mesmo processo).
-  useEffect(() => {
-    if (!processoAlvo) return;
-    setBusca(processoAlvo);
-    setFiltroStatus("");
-    setFiltroTribunal("");
-    setFiltroPrio("");
-    onProcessoAlvoConsumido && onProcessoAlvoConsumido();
-  }, [processoAlvo]);
-
-  const salvarObservacao = async () => {
-    if (!detalhe) return;
-    setSalvandoObs(true);
-    const { error } = await atualizarObservacao(detalhe.id, obsEdit);
-    setSalvandoObs(false);
-    if (error) { toast("Erro ao salvar observação. Tente novamente.", "danger"); return; }
-    const valor = obsEdit && obsEdit.trim() ? obsEdit.trim() : null;
-    setDetalhe(d => d ? { ...d, observacao: valor } : d);
-    toast("Observação salva", "success");
-  };
 
   const tribunaisUnicos = useMemo(() => {
     return [...new Set(items.map(i => i.tribunal).filter(Boolean))].sort();
@@ -1322,15 +1215,13 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
     setForm({
       processo: pub.numero_processo || "",
       parte: "",  // você preenche
-      tipo: "Acompanhar",
+      tipo: "Manifestação",
       dataLimite,
       responsavel: "Felipe",
       obs: `📡 Captado do DJEN — ${pub.data_publicacao || ""}\nGatilhos: ${pub.gatilhos || ""}\nMedicamentos: ${pub.medicamentos || ""}\n${pub.observacao || ""}`.trim(),
       concluido: false,
       prioridade: pub.prioridade === 1 ? "alta" : (pub.prioridade === 2 ? "media" : "baixa"),
       modoData: "final",
-      djenId: pub.id,
-      djenAcompanhar: !!pub.acompanhar,
     });
     setModal("novo");
     setAba("lista");
@@ -1394,10 +1285,6 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
           <option value="2">P2 Média</option>
           <option value="9">P9 Baixa</option>
         </select>
-        <button onClick={() => { setFormNovoProcesso({ numero_processo:"", tribunal:"", observacao:"" }); setModalNovoProcesso(true); }}
-          style={{ background:T.primary, color:"#fff", border:"none", borderRadius:6, padding:"7px 13px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-          + Adicionar processo
-        </button>
       </div>
 
       {/* Lista */}
@@ -1426,23 +1313,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                          borderLeft:`4px solid ${stCfg.cor}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    {p.acompanhar && (
-                      <span title="Processo sob acompanhamento contínuo no DJEN"
-                        style={{ background:"#5c6b3a", color:"#fff", padding:"2px 7px", borderRadius:3,
-                                 fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
-                        🔔 ACOMP
-                      </span>
-                    )}
-                    {(p.id_djen||"").startsWith("manual_") && (
-                      <span title="Processo adicionado manualmente"
-                        style={{ background:"#744210", color:"#fefcbf", padding:"2px 7px", borderRadius:3, fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
-                        MANUAL
-                      </span>
-                    )}
-                    <span
-                      onClick={e => { e.stopPropagation(); if (p.numero_processo && irParaPrazo) irParaPrazo(p.numero_processo); }}
-                      title={p.numero_processo ? "Ver na aba Prazos" : ""}
-                      style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color: p.numero_processo && irParaPrazo ? T.primary : T.text, cursor: p.numero_processo && irParaPrazo ? "pointer" : "default", textDecoration: p.numero_processo && irParaPrazo ? "underline" : "none", textUnderlineOffset:2 }}>
+                    <span style={{ fontFamily:"monospace", fontSize:12, fontWeight:600, color:T.text }}>
                       {p.numero_processo || "—"}
                     </span>
                     <span style={{ background:T.text, color:T.card, padding:"2px 7px", borderRadius:3,
@@ -1521,36 +1392,10 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                 <span>{(detalhe.gatilhos||"").split(";").map(g => COR_GATILHO[g.trim()]?.label || g.trim()).filter(Boolean).join(" · ") || "—"}</span>
                 <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Medicamentos</span>
                 <span>{detalhe.medicamentos || "—"}</span>
-              </div>
-
-              {/* Observação editável */}
-              <div style={{ marginBottom:18 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                  <div style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
-                    Observação
-                  </div>
-                  <button onClick={salvarObservacao}
-                    disabled={salvandoObs || (obsEdit || "") === (detalhe.observacao || "")}
-                    style={{
-                      ...BTN,
-                      fontSize:11, padding:"5px 12px",
-                      background: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? "transparent" : T.primary,
-                      color: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.textMuted : "#fff",
-                      borderColor: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.border : T.primary,
-                      cursor: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? "default" : "pointer",
-                    }}>
-                    {salvandoObs ? "Salvando…" : "Salvar"}
-                  </button>
-                </div>
-                <textarea
-                  value={obsEdit}
-                  onChange={e => setObsEdit(e.target.value)}
-                  placeholder="Anotação livre — ex.: inicial protocolada em 31/05/2026, aguardando contestação…"
-                  rows={3}
-                  style={{ width:"100%", boxSizing:"border-box", background:T.card,
-                           padding:"10px 12px", borderRadius:6, border:`1px solid ${T.border}`,
-                           color:T.text, fontSize:13, lineHeight:1.6, fontFamily:"inherit",
-                           resize:"vertical" }} />
+                {detalhe.observacao && <>
+                  <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Obs.</span>
+                  <span style={{ whiteSpace:"pre-wrap" }}>{detalhe.observacao}</span>
+                </>}
               </div>
 
               {/* Texto destacado */}
@@ -1567,26 +1412,6 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                   </div>
                 </div>
               )}
-
-              {/* Acompanhamento contínuo no DJEN */}
-              <div style={{ background:T.card, padding:"12px 14px", borderRadius:6,
-                            border:`1px solid ${T.border}`, marginBottom:14 }}>
-                <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
-                  <input type="checkbox"
-                    checked={!!detalhe.acompanhar}
-                    onChange={(e) => atualizarAcompanhar(detalhe.id, e.target.checked)}
-                    style={{ marginTop:3, accentColor:T.primary, cursor:"pointer" }} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:T.text }}>
-                      Acompanhar este processo no DJEN
-                    </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginTop:3, lineHeight:1.5 }}>
-                      O monitor passa a buscar TODAS as movimentações deste processo, mesmo as não-oncológicas.
-                      Você recebe alerta no e-mail quando houver novidade.
-                    </div>
-                  </div>
-                </label>
-              </div>
 
               {/* Ações: mudar status */}
               <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:14 }}>
@@ -1614,8 +1439,11 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
               {/* Ações finais */}
               <div style={{ marginTop:18, display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
                 <button onClick={() => {
-                    const vinculados = prazosDoProcesso(detalhe.numero_processo);
-                    setConfirmApagar({ pub: detalhe, vinculados });
+                    if (confirm("Apagar esta publicação permanentemente?")) {
+                      remover(detalhe.id);
+                      setDetalhe(null);
+                      toast("Publicação apagada","danger");
+                    }
                   }}
                   style={{ ...BTN_GHOST, color:"#b8412e", borderColor:"#b8412e" }}>
                   Apagar
@@ -1633,134 +1461,6 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
           </div>
         </div>
       )}
-
-      {modalNovoProcesso && (
-        <div onClick={() => setModalNovoProcesso(false)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:300, display:"flex", justifyContent:"center", alignItems:"center", padding:16 }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background:T.bg, color:T.text, borderRadius:12, maxWidth:480, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.4)", border:`1px solid ${T.border}` }}>
-            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Adicionar processo para acompanhamento</div>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2a passada diaria.</div>
-              </div>
-              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"none", border:"none", color:T.textMuted, fontSize:22, cursor:"pointer", padding:0 }}>x</button>
-            </div>
-            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
-              <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Numero do processo *</span>
-                <input autoFocus value={formNovoProcesso.numero_processo}
-                  onChange={e => setFormNovoProcesso(f => ({ ...f, numero_processo: mascararProcesso(e.target.value) }))}
-                  placeholder="0000000-00.0000.0.00.0000"
-                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"monospace", outline:"none", width:"100%", boxSizing:"border-box" }} />
-              </label>
-              <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Tribunal (opcional)</span>
-                <select value={formNovoProcesso.tribunal} onChange={e => setFormNovoProcesso(f => ({ ...f, tribunal: e.target.value }))}
-                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" }}>
-                  <option value="">Qualquer tribunal</option>
-                  {["TJAL","TJAM","TJCE","TJES","TJGO","TJMA","TJMG","TJMT","TJPA","TJRS","TJSP"].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </label>
-              <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observacao (opcional)</span>
-                <textarea value={formNovoProcesso.observacao} onChange={e => setFormNovoProcesso(f => ({ ...f, observacao: e.target.value }))}
-                  rows={2} placeholder="Ex: Cliente atual..."
-                  style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box", resize:"vertical" }} />
-              </label>
-            </div>
-            <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, justifyContent:"flex-end" }}>
-              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 16px", color:T.textSoft, cursor:"pointer", fontSize:13 }}>Cancelar</button>
-              <button disabled={!formNovoProcesso.numero_processo.trim() || salvandoNovoProcesso}
-                onClick={async () => {
-                  if (!formNovoProcesso.numero_processo.trim()) return;
-                  setSalvandoNovoProcesso(true);
-                  const result = await adicionarProcessoManual(formNovoProcesso);
-                  setSalvandoNovoProcesso(false);
-                  if (result.error) { toast("Erro ao salvar. Tente novamente.","danger"); }
-                  else { setModalNovoProcesso(false); toast("Processo adicionado para acompanhamento","success"); }
-                }}
-                style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", opacity:(!formNovoProcesso.numero_processo.trim()||salvandoNovoProcesso)?0.5:1 }}>
-                {salvandoNovoProcesso ? "Salvando..." : "Adicionar e acompanhar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmApagar && (() => {
-        const { pub, vinculados } = confirmApagar;
-        const temPrazo = vinculados.length > 0;
-        const fechar = () => setConfirmApagar(null);
-        const apagarPublicacao = () => { remover(pub.id); setDetalhe(null); setConfirmApagar(null); toast("Publicação apagada","danger"); };
-        const apagarTudo = () => {
-          const ids = new Set(vinculados.map(p => p.id));
-          remover(pub.id);
-          setPrazos(prev => prev.filter(p => !ids.has(p.id)));
-          setDetalhe(null);
-          setConfirmApagar(null);
-          toast(`Publicação + ${vinculados.length} prazo(s) apagados`,"danger");
-        };
-        return (
-          <div onClick={fechar}
-            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:320, display:"flex", justifyContent:"center", alignItems:"center", padding:16 }}>
-            <div onClick={e => e.stopPropagation()}
-              style={{ background:T.bg, color:T.text, borderRadius:12, maxWidth:520, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.4)", border:`1px solid ${T.border}` }}>
-              <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
-                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Apagar publicação do DJEN</div>
-                <div style={{ fontSize:12, color:T.textMuted, marginTop:4, fontFamily:"monospace" }}>{pub.numero_processo || "—"}</div>
-              </div>
-
-              <div style={{ padding:"16px 20px" }}>
-                {!temPrazo ? (
-                  <div style={{ fontSize:13.5, color:T.textSoft }}>
-                    Esta publicação será apagada permanentemente do DJEN. Nenhum prazo deste processo foi encontrado na aba Prazos.
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize:13.5, color:T.textSoft, marginBottom:12 }}>
-                      Este processo tem <strong>{vinculados.length} prazo(s)</strong> na aba Prazos. O que deseja apagar?
-                    </div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                      {vinculados.map(p => (
-                        <div key={p.id}
-                          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 12px", borderRadius:8, border:`1px solid ${T.border}`, background:T.bgSoft || "transparent" }}>
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{p.tipo || "Prazo"}</div>
-                            <div style={{ fontSize:11.5, color:T.textMuted }}>{p.parte || "—"} · venc. {fmt(p.dataLimite)}</div>
-                          </div>
-                          <span style={{ fontSize:10.5, fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:6,
-                            color: p.concluido ? "#3a7d44" : "#b8412e",
-                            border: `1px solid ${p.concluido ? "#3a7d44" : "#b8412e"}` }}>
-                            {p.concluido ? "Concluído" : "Ativo"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
-                <button onClick={fechar}
-                  style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 16px", color:T.textSoft, cursor:"pointer", fontSize:13 }}>
-                  Cancelar
-                </button>
-                <button onClick={apagarPublicacao}
-                  style={{ background:"transparent", border:"1px solid #b8412e", borderRadius:8, padding:"9px 16px", color:"#b8412e", cursor:"pointer", fontSize:13, fontWeight:600 }}>
-                  {temPrazo ? "Apagar só a publicação" : "Apagar"}
-                </button>
-                {temPrazo && (
-                  <button onClick={apagarTudo}
-                    style={{ background:"#b8412e", border:"none", borderRadius:8, padding:"9px 18px", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700 }}>
-                    Apagar publicação + {vinculados.length} prazo(s)
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </>
   );
 }
@@ -1802,8 +1502,6 @@ export default function App() {
   // Estados UI
   const [filtro, setFiltro]             = useState("todos");
   const [busca, setBusca]               = useState("");
-  const [buscaPrazos, setBuscaPrazos]   = useState(""); // navegação cruzada DJEN→Prazos
-  const [processoAlvoDjen, setProcessoAlvoDjen] = useState(""); // navegação cruzada Prazos→DJEN
   const [ordenacao, setOrdenacao]       = useState("data_asc");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
@@ -1892,7 +1590,7 @@ export default function App() {
   }, [prazos]);
 
   const openNovo = (dataLimite="") => {
-    setForm({ processo:"", parte:"", tipo:"Acompanhar", dataLimite, responsavel:"Felipe", obs:"", concluido:false, prioridade:"media", modoData:"final" });
+    setForm({ processo:"", parte:"", tipo:TIPOS_DEFAULT[3], dataLimite, responsavel:"Felipe", obs:"", concluido:false, prioridade:"media", modoData:"final" });
     setModal("novo");
   };
   const openEdit = p => { setForm({...p}); setModal(p.id); };
@@ -1925,14 +1623,6 @@ export default function App() {
     setPrazos(prev => prev.map(p => p.id === id ? {...p, concluido:!p.concluido} : p));
     const p = prazos.find(x => x.id === id);
     toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
-  };
-  const toggleOrcamento = id => {
-    const p = prazos.find(x => x.id === id);
-    setPrazos(prev => prev.map(x => x.id === id ? {...x, orcamentoEnviado: !x.orcamentoEnviado} : x));
-    toast(p && p.orcamentoEnviado ? "Marca de orçamento removida" : "Orçamento marcado como enviado","success");
-  };
-  const setDataEntrada = (id, valor) => {
-    setPrazos(prev => prev.map(x => x.id === id ? {...x, dataEntrada: valor || null} : x));
   };
 
   const gerarDadosExport = (l) => {
@@ -2153,12 +1843,6 @@ export default function App() {
             {lista.map(p => {
               const st = STATUS_CFG[p.status][modo];
               const du = diasUteisRestantes(p.dataLimite);
-              const tribunal = tribunalDoCNJ(p.processo);
-              // Extrair info DJEN da obs quando captado do monitor
-              const isDjen = p.djenId || (p.obs && p.obs.includes("Captado do DJEN"));
-              const djenInfoMatch = isDjen && p.obs ? p.obs.match(/Captado do DJEN[^—\n]*[—\-]\s*([\d-]+)/) : null;
-              const djenGatilho = isDjen && p.obs ? (p.obs.match(/Gatilhos:\s*([^\n]+)/) || [])[1] : null;
-              const djenMed = isDjen && p.obs ? (p.obs.match(/Medicamentos:\s*([^\n]+)/) || [])[1] : null;
               return (
                 <div key={p.id} style={{
                   background:T.card, border:`1px solid ${T.border}`,
@@ -2175,81 +1859,12 @@ export default function App() {
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
                       <span style={{ fontWeight:600, fontSize:14, color:T.text, textDecoration:p.concluido?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.parte}</span>
                     </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:4 }}>{p.tipo} · {p.processo ? (
-                      <span onClick={() => { setProcessoAlvoDjen(p.processo); setAba("djen"); }}
-                        title="Ver no DJEN"
-                        style={{ fontFamily:"monospace", color:T.primary, cursor:"pointer", textDecoration:"underline", textDecorationStyle:"dotted", textUnderlineOffset:2 }}>{p.processo}</span>
-                    ) : <span style={{fontFamily:"monospace"}}>{p.processo}</span>}{tribunal && (
-                      <span title={`Tribunal: ${tribunal}`}
-                        style={{ marginLeft:6, fontSize:9.5, fontWeight:700, letterSpacing:0.3, color:T.primary, background:T.cardAlt, border:`1px solid ${T.border}`, padding:"1px 6px", borderRadius:4, verticalAlign:"middle", whiteSpace:"nowrap" }}>{tribunal}</span>
-                    )}</div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:4 }}>{p.tipo} · <span style={{fontFamily:"monospace"}}>{p.processo}</span></div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
-                      <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id); }}
-                        title={p.orcamentoEnviado ? "Orçamento enviado — clique para desmarcar" : "Marcar orçamento como enviado"}
-                        style={{
-                          fontSize:10.5, fontWeight:700, cursor:"pointer", userSelect:"none",
-                          padding:"2px 9px", borderRadius:999, display:"inline-flex", alignItems:"center", gap:4,
-                          color: p.orcamentoEnviado ? "#fff" : "#2f855a",
-                          background: p.orcamentoEnviado ? "#2f855a" : "transparent",
-                          border: `1px solid ${p.orcamentoEnviado ? "#2f855a" : "#9ae6b4"}`,
-                        }}>
-                        {p.orcamentoEnviado ? "✓ Orçamento enviado" : "＋ Orçamento enviado?"}
-                      </span>
-                      <span style={{ position:"relative", display:"inline-flex" }}>
-                        <input type="date" value={p.dataEntrada || ""}
-                          onClick={(e) => { e.stopPropagation(); try { e.currentTarget.showPicker(); } catch(_){} }}
-                          onChange={(e) => setDataEntrada(p.id, e.target.value)}
-                          aria-label="Data de entrada no processo"
-                          style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity:0, cursor:"pointer", border:"none", padding:0, margin:0 }} />
-                        <span style={{
-                          fontSize:10.5, fontWeight:700, userSelect:"none", pointerEvents:"none",
-                          padding:"2px 9px", borderRadius:999, display:"inline-flex", alignItems:"center", gap:4,
-                          color: p.dataEntrada ? "#fff" : T.primary,
-                          background: p.dataEntrada ? T.primary : "transparent",
-                          border: `1px solid ${T.primary}`,
-                        }}>
-                          {p.dataEntrada ? `📌 Entrei ${fmt(p.dataEntrada)}` : "📌 Data de entrada"}
-                        </span>
-                      </span>
                     </div>
-                    {/* Info DJEN compacta */}
-                    {isDjen && (djenGatilho || djenMed) && (
-                      <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                        <span style={{ fontSize:10, color:"#5c6b3a", background:"rgba(92,107,58,0.12)", padding:"1px 7px", borderRadius:3, fontWeight:600 }}>📡 DJEN</span>
-                        {djenGatilho && <span style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace" }}>{djenGatilho.replace(/G[0-9]_/g, "")}</span>}
-                        {djenMed && <span style={{ fontSize:10, color:T.textMuted }}>{djenMed}</span>}
-                      </div>
-                    )}
-                    {/* Toggle Monitorar no DJEN — aparece para qualquer prazo captado do DJEN */}
-                    {isDjen && (
-                      <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6 }}>
-                        <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}
-                          onClick={e => e.stopPropagation()}>
-                          <input type="checkbox"
-                            checked={!!p.djenAcompanhar}
-                            onChange={async (e) => {
-                              const novoVal = e.target.checked;
-                              setPrazos(prev => prev.map(x => x.id === p.id ? {...x, djenAcompanhar: novoVal} : x));
-                              const sb = _sb;
-                              if (sb && _userId) {
-                                if (p.djenId) {
-                                  // prazo novo: tem id direto
-                                  await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("id", p.djenId);
-                                } else if (p.processo) {
-                                  // prazo antigo: busca pelo número do processo
-                                  await sb.from("publicacoes_djen").update({ acompanhar: novoVal }).eq("user_id", _userId).eq("numero_processo", p.processo);
-                                }
-                              }
-                              toast(novoVal ? "Monitoramento ativado" : "Monitoramento desativado", "success");
-                            }}
-                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:13, height:13 }} />
-                          <span style={{ fontSize:10, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
-                        </label>
-                      </div>
-                    )}
-                    {p.obs && !isDjen && <div style={{ fontSize:11, color:T.textSoft, marginTop:4, fontStyle:"italic" }}>{p.obs}</div>}
+                    {p.obs && <div style={{ fontSize:11, color:T.textSoft, marginTop:4, fontStyle:"italic" }}>{p.obs}</div>}
                   </div>
                   <AcoesMenu prazo={p} onEdit={openEdit} onDelete={setConfirmDel} onToast={toast} T={T} />
                 </div>
@@ -2328,10 +1943,8 @@ export default function App() {
       })()}
 
             {aba === "djen" && (
-        <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} prazos={prazos} setAba={setAba}
-                    setForm={setForm} setModal={setModal} toast={toast}
-                    processoAlvo={processoAlvoDjen} onProcessoAlvoConsumido={() => setProcessoAlvoDjen("")}
-                    irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
+        <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} setAba={setAba}
+                    setForm={setForm} setModal={setModal} toast={toast} />
       )}
 
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
