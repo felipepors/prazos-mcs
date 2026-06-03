@@ -1213,7 +1213,7 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
-function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irParaPrazo, processoAlvo, onProcessoAlvoConsumido }) {
+function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toast, irParaPrazo, processoAlvo, onProcessoAlvoConsumido }) {
   const { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
   const [obsEdit, setObsEdit] = useState("");
@@ -1225,6 +1225,15 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
   const [modalNovoProcesso, setModalNovoProcesso] = useState(false);
   const [formNovoProcesso, setFormNovoProcesso] = useState({ numero_processo:"", tribunal:"", observacao:"" });
   const [salvandoNovoProcesso, setSalvandoNovoProcesso] = useState(false);
+  const [confirmApagar, setConfirmApagar] = useState(null); // { pub, vinculados }
+
+  // Prazos da aba Prazos que pertencem ao mesmo processo (casa por digitos, ignora mascara CNJ)
+  const soDig = s => (s || "").replace(/\D/g, "");
+  const prazosDoProcesso = (numero) => {
+    const alvo = soDig(numero);
+    if (!alvo) return [];
+    return (prazos || []).filter(p => soDig(p.processo) === alvo);
+  };
 
   // Carrega a observação atual no editor sempre que o modal de detalhe abre/troca
   useEffect(() => {
@@ -1579,11 +1588,8 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
               {/* Ações finais */}
               <div style={{ marginTop:18, display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
                 <button onClick={() => {
-                    if (confirm("Apagar esta publicação permanentemente?")) {
-                      remover(detalhe.id);
-                      setDetalhe(null);
-                      toast("Publicação apagada","danger");
-                    }
+                    const vinculados = prazosDoProcesso(detalhe.numero_processo);
+                    setConfirmApagar({ pub: detalhe, vinculados });
                   }}
                   style={{ ...BTN_GHOST, color:"#b8412e", borderColor:"#b8412e" }}>
                   Apagar
@@ -1655,6 +1661,80 @@ function PainelDJEN({ T, modo, setPrazos, setAba, setForm, setModal, toast, irPa
           </div>
         </div>
       )}
+
+      {confirmApagar && (() => {
+        const { pub, vinculados } = confirmApagar;
+        const temPrazo = vinculados.length > 0;
+        const fechar = () => setConfirmApagar(null);
+        const apagarPublicacao = () => { remover(pub.id); setDetalhe(null); setConfirmApagar(null); toast("Publicação apagada","danger"); };
+        const apagarTudo = () => {
+          const ids = new Set(vinculados.map(p => p.id));
+          remover(pub.id);
+          setPrazos(prev => prev.filter(p => !ids.has(p.id)));
+          setDetalhe(null);
+          setConfirmApagar(null);
+          toast(`Publicação + ${vinculados.length} prazo(s) apagados`,"danger");
+        };
+        return (
+          <div onClick={fechar}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:320, display:"flex", justifyContent:"center", alignItems:"center", padding:16 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:T.bg, color:T.text, borderRadius:12, maxWidth:520, width:"100%", boxShadow:"0 20px 60px rgba(0,0,0,0.4)", border:`1px solid ${T.border}` }}>
+              <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Apagar publicação do DJEN</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:4, fontFamily:"monospace" }}>{pub.numero_processo || "—"}</div>
+              </div>
+
+              <div style={{ padding:"16px 20px" }}>
+                {!temPrazo ? (
+                  <div style={{ fontSize:13.5, color:T.textSoft }}>
+                    Esta publicação será apagada permanentemente do DJEN. Nenhum prazo deste processo foi encontrado na aba Prazos.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize:13.5, color:T.textSoft, marginBottom:12 }}>
+                      Este processo tem <strong>{vinculados.length} prazo(s)</strong> na aba Prazos. O que deseja apagar?
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      {vinculados.map(p => (
+                        <div key={p.id}
+                          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 12px", borderRadius:8, border:`1px solid ${T.border}`, background:T.bgSoft || "transparent" }}>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{p.tipo || "Prazo"}</div>
+                            <div style={{ fontSize:11.5, color:T.textMuted }}>{p.parte || "—"} · venc. {fmt(p.dataLimite)}</div>
+                          </div>
+                          <span style={{ fontSize:10.5, fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:6,
+                            color: p.concluido ? "#3a7d44" : "#b8412e",
+                            border: `1px solid ${p.concluido ? "#3a7d44" : "#b8412e"}` }}>
+                            {p.concluido ? "Concluído" : "Ativo"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div style={{ padding:"14px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
+                <button onClick={fechar}
+                  style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 16px", color:T.textSoft, cursor:"pointer", fontSize:13 }}>
+                  Cancelar
+                </button>
+                <button onClick={apagarPublicacao}
+                  style={{ background:"transparent", border:"1px solid #b8412e", borderRadius:8, padding:"9px 16px", color:"#b8412e", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                  {temPrazo ? "Apagar só a publicação" : "Apagar"}
+                </button>
+                {temPrazo && (
+                  <button onClick={apagarTudo}
+                    style={{ background:"#b8412e", border:"none", borderRadius:8, padding:"9px 18px", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700 }}>
+                    Apagar publicação + {vinculados.length} prazo(s)
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
@@ -1819,6 +1899,11 @@ export default function App() {
     setPrazos(prev => prev.map(p => p.id === id ? {...p, concluido:!p.concluido} : p));
     const p = prazos.find(x => x.id === id);
     toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
+  };
+  const toggleOrcamento = id => {
+    const p = prazos.find(x => x.id === id);
+    setPrazos(prev => prev.map(x => x.id === id ? {...x, orcamentoEnviado: !x.orcamentoEnviado} : x));
+    toast(p && p.orcamentoEnviado ? "Marca de orçamento removida" : "Orçamento marcado como enviado","success");
   };
 
   const gerarDadosExport = (l) => {
@@ -2068,6 +2153,17 @@ export default function App() {
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
+                      <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id); }}
+                        title={p.orcamentoEnviado ? "Orçamento enviado — clique para desmarcar" : "Marcar orçamento como enviado"}
+                        style={{
+                          fontSize:10.5, fontWeight:700, cursor:"pointer", userSelect:"none",
+                          padding:"2px 9px", borderRadius:999, display:"inline-flex", alignItems:"center", gap:4,
+                          color: p.orcamentoEnviado ? "#fff" : "#2f855a",
+                          background: p.orcamentoEnviado ? "#2f855a" : "transparent",
+                          border: `1px solid ${p.orcamentoEnviado ? "#2f855a" : "#9ae6b4"}`,
+                        }}>
+                        {p.orcamentoEnviado ? "✓ Orçamento enviado" : "＋ Orçamento enviado?"}
+                      </span>
                     </div>
                     {/* Info DJEN compacta */}
                     {isDjen && (djenGatilho || djenMed) && (
@@ -2183,7 +2279,7 @@ export default function App() {
       })()}
 
             {aba === "djen" && (
-        <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} setAba={setAba}
+        <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} prazos={prazos} setAba={setAba}
                     setForm={setForm} setModal={setModal} toast={toast}
                     processoAlvo={processoAlvoDjen} onProcessoAlvoConsumido={() => setProcessoAlvoDjen("")}
                     irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
