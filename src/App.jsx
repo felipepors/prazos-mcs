@@ -259,19 +259,19 @@ async function fazerLogout() {
 // ─── Tema (claro/escuro) ──────────────────────────────────────────────────────
 const TEMA = {
   light: {
-    bg:"#f5f7fa", card:"#fff", cardAlt:"#f7fafc", border:"#e2e8f0", borderStrong:"#cbd5e0",
-    text:"#1a202c", textSoft:"#4a5568", textMuted:"#a0aec0",
-    primary:"#2b6cb0", primaryHover:"#2c5282", primarySoft:"#ebf8ff",
-    accent:"#2d3748", overlay:"#00000066",
+    bg:"#F7F6F2", card:"#fff", cardAlt:"#FBFAF6", border:"#E8E5DC", borderStrong:"#D5D1C5",
+    text:"#1B2A4A", textSoft:"#52617E", textMuted:"#9AA3B5",
+    primary:"#1B2A4A", primaryHover:"#13203A", primarySoft:"#EEF1F7", primaryText:"#fff",
+    accent:"#F5C518", overlay:"#1B2A4A55",
     danger:"#e53e3e", dangerSoft:"#fff5f5", dangerBorder:"#fed7d7",
     warn:"#dd6b20", warnSoft:"#fffaf0",
     success:"#38a169", successSoft:"#f0fff4",
   },
   dark: {
-    bg:"#0f1419", card:"#1a202c", cardAlt:"#2d3748", border:"#2d3748", borderStrong:"#4a5568",
-    text:"#f7fafc", textSoft:"#cbd5e0", textMuted:"#718096",
-    primary:"#63b3ed", primaryHover:"#90cdf4", primarySoft:"#2a4365",
-    accent:"#f7fafc", overlay:"#00000099",
+    bg:"#0F1626", card:"#18233B", cardAlt:"#22304D", border:"#2A3A5C", borderStrong:"#3D5078",
+    text:"#F2F4F8", textSoft:"#B8C2D8", textMuted:"#7C8AA5",
+    primary:"#F5C518", primaryHover:"#FFD43B", primarySoft:"#2A3A5C", primaryText:"#1B2A4A",
+    accent:"#F5C518", overlay:"#00000099",
     danger:"#fc8181", dangerSoft:"#742a2a", dangerBorder:"#9b2c2c",
     warn:"#f6ad55", warnSoft:"#7b341e",
     success:"#68d391", successSoft:"#22543d",
@@ -279,17 +279,17 @@ const TEMA = {
 };
 
 const STATUS_CFG = {
-  vencido:   { label:"Vencido",     light:{ c:"#c53030", bg:"#fff5f5", pill:"#fed7d7", text:"#742a2a" }, dark:{ c:"#fc8181", bg:"#742a2a44", pill:"#9b2c2c", text:"#feb2b2" } },
-  urgente:   { label:"Urgente",     light:{ c:"#c05621", bg:"#fffaf0", pill:"#feebc8", text:"#7b341e" }, dark:{ c:"#f6ad55", bg:"#7b341e44", pill:"#9c4221", text:"#fbd38d" } },
-  proximo:   { label:"Esta semana", light:{ c:"#b7791f", bg:"#fffff0", pill:"#fefcbf", text:"#744210" }, dark:{ c:"#ecc94b", bg:"#74421044", pill:"#975a16", text:"#faf089" } },
-  normal:    { label:"No prazo",    light:{ c:"#2f855a", bg:"#f0fff4", pill:"#c6f6d5", text:"#22543d" }, dark:{ c:"#68d391", bg:"#22543d44", pill:"#2f855a", text:"#9ae6b4" } },
-  concluido: { label:"Concluído",   light:{ c:"#718096", bg:"#f7fafc", pill:"#e2e8f0", text:"#4a5568" }, dark:{ c:"#a0aec0", bg:"#2d374844", pill:"#4a5568", text:"#cbd5e0" } },
+  vencido:   { label:"Vencido",     light:{ c:"#D64541", bg:"#FCEBEB", pill:"#F7C9C9", text:"#791F1F" }, dark:{ c:"#F09595", bg:"#791F1F44", pill:"#A32D2D", text:"#F7C1C1" } },
+  urgente:   { label:"Urgente",     light:{ c:"#E08A2E", bg:"#FAEEDA", pill:"#F6DCAE", text:"#6B4A0A" }, dark:{ c:"#FAC775", bg:"#854F0B44", pill:"#BA7517", text:"#FAE3B8" } },
+  proximo:   { label:"Esta semana", light:{ c:"#C9A227", bg:"#FBF6E0", pill:"#F0E3AC", text:"#6B5408" }, dark:{ c:"#E8CD6B", bg:"#6B540844", pill:"#9A7A12", text:"#F2E5B0" } },
+  normal:    { label:"No prazo",    light:{ c:"#1D9E75", bg:"#E1F5EE", pill:"#BCE9D8", text:"#085041" }, dark:{ c:"#5DCAA5", bg:"#08504144", pill:"#0F6E56", text:"#9FE1CB" } },
+  concluido: { label:"Concluído",   light:{ c:"#8B92A3", bg:"#F4F3EE", pill:"#E4E2D9", text:"#52617E" }, dark:{ c:"#9AA3B5", bg:"#22304D66", pill:"#3D5078", text:"#B8C2D8" } },
 };
 
 const PRIO_CFG = {
-  alta:  { label:"Alta",  light:{ c:"#c53030", bg:"#fff5f5", pill:"#fed7d7" }, dark:{ c:"#fc8181", bg:"#742a2a44", pill:"#9b2c2c" } },
-  media: { label:"Média", light:{ c:"#b7791f", bg:"#fffff0", pill:"#fefcbf" }, dark:{ c:"#ecc94b", bg:"#74421044", pill:"#975a16" } },
-  baixa: { label:"Baixa", light:{ c:"#2f855a", bg:"#f0fff4", pill:"#c6f6d5" }, dark:{ c:"#68d391", bg:"#22543d44", pill:"#2f855a" } },
+  alta:  { label:"Alta",  light:{ c:"#D64541", bg:"#FCEBEB", pill:"#F7C9C9" }, dark:{ c:"#F09595", bg:"#791F1F44", pill:"#A32D2D" } },
+  media: { label:"Média", light:{ c:"#C9A227", bg:"#FBF6E0", pill:"#F0E3AC" }, dark:{ c:"#E8CD6B", bg:"#6B540844", pill:"#9A7A12" } },
+  baixa: { label:"Baixa", light:{ c:"#1D9E75", bg:"#E1F5EE", pill:"#BCE9D8" }, dark:{ c:"#5DCAA5", bg:"#08504144", pill:"#0F6E56" } },
 };
 
 const TIPOS_DEFAULT = [
@@ -836,7 +836,7 @@ function Calendario({ prazos, onEdit, onNovoData, feriadosNomes, T, modo, onToas
               <div style={{ fontSize:12, color:T.textSoft }}>{prazosAtivos.length} prazo(s)</div>
             </div>
             <button onClick={() => onNovoData(diaAtivo)}
-              style={{ background:T.primary, color:"#fff", border:"none", borderRadius:10, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+              style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
               <Icon name="plus" size={14} color="#fff" /> Novo
             </button>
           </div>
@@ -1016,7 +1016,7 @@ function TelaLogin({ T, modo, onToast }) {
           </label>
           {erro && <div style={{ background:T.dangerSoft, border:`1px solid ${T.danger}33`, color:T.danger, borderRadius:8, padding:"8px 12px", fontSize:12 }}>{erro}</div>}
           <button onClick={submeter} disabled={loading || !email || !senha}
-            style={{ background:T.primary, color:"#fff", border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
+            style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
             {loading ? "Aguarde..." : criando ? "Criar conta" : "Entrar"}
           </button>
           <button onClick={() => { setCriando(!criando); setErro(""); }}
@@ -1412,7 +1412,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
           <option value="9">P9 Baixa</option>
         </select>
         <button onClick={() => { setFormNovoProcesso({ numero_processo:"", tribunal:"", observacao:"" }); setModalNovoProcesso(true); }}
-          style={{ background:T.primary, color:"#fff", border:"none", borderRadius:6, padding:"7px 13px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+          style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:6, padding:"7px 13px", fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
           + Adicionar processo
         </button>
       </div>
@@ -1642,7 +1642,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                   Copiar nº
                 </button>
                 <button onClick={() => promoverPrazo(detalhe)}
-                  style={{ ...BTN, background:T.primary, color:"#fff" }}>
+                  style={{ ...BTN, background:T.primary, color:T.primaryText }}>
                   Promover a Prazo →
                 </button>
               </div>
@@ -1697,7 +1697,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                   if (result.error) { toast("Erro ao salvar. Tente novamente.","danger"); }
                   else { setModalNovoProcesso(false); toast("Processo adicionado para acompanhamento","success"); }
                 }}
-                style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", opacity:(!formNovoProcesso.numero_processo.trim()||salvandoNovoProcesso)?0.5:1 }}>
+                style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", opacity:(!formNovoProcesso.numero_processo.trim()||salvandoNovoProcesso)?0.5:1 }}>
                 {salvandoNovoProcesso ? "Salvando..." : "Adicionar e acompanhar"}
               </button>
             </div>
@@ -1994,7 +1994,7 @@ export default function App() {
   const INP = { background:T.card, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"Inter,system-ui,sans-serif", outline:"none", width:"100%", boxSizing:"border-box" };
   const LBL = { fontSize:11, color:T.textMuted, letterSpacing:1.2, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" };
   const BTN_GHOST = { background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 14px", color:T.textSoft, cursor:"pointer", fontSize:13, fontWeight:500 };
-  const BTN_PRIMARY = { background:T.primary, border:"none", borderRadius:10, padding:"10px 18px", color:"#fff", fontWeight:600, cursor:"pointer", fontSize:14, display:"inline-flex", alignItems:"center", gap:6 };
+  const BTN_PRIMARY = { background:T.primary, border:"none", borderRadius:10, padding:"10px 18px", color:T.primaryText, fontWeight:600, cursor:"pointer", fontSize:14, display:"inline-flex", alignItems:"center", gap:6 };
 
   const adicionarTipo = () => {
     const t = novoTipoInput.trim();
@@ -2030,7 +2030,7 @@ export default function App() {
 
       {/* ── HEADER COMPACTO ── */}
       <header style={{
-        background: modo==="dark" ? "linear-gradient(135deg,#1a202c,#2d3748)" : "linear-gradient(135deg,#1a365d,#2b6cb0)",
+        background: modo==="dark" ? "#0B1220" : "#1B2A4A",
         padding:"calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 14px calc(16px + env(safe-area-inset-left, 0px))", position:"sticky", top:0, zIndex:50,
         boxShadow:"0 2px 8px #00000022",
       }}>
@@ -2049,11 +2049,11 @@ export default function App() {
               <Icon name={modo==="light"?"moon":"sun"} size={18} color="#fff" />
             </button>
             <button onClick={() => setResumoAberto(true)} aria-label={`Abrir resumo do dia${totalAtencao>0?": "+totalAtencao+" prazos de atenção":""}`} style={{
-              background: totalAtencao>0 ? "#fff" : "rgba(255,255,255,0.15)",
-              border:"none", borderRadius:8, padding:8, cursor:"pointer", display:"flex", alignItems:"center", gap:4,
-              color: totalAtencao>0 ? T.primary : "#fff", position:"relative",
+              background: totalAtencao>0 ? "#F5C518" : "rgba(255,255,255,0.12)",
+              border:"none", borderRadius:10, padding:8, cursor:"pointer", display:"flex", alignItems:"center", gap:4,
+              color: totalAtencao>0 ? "#1B2A4A" : "#fff", position:"relative",
             }}>
-              <Icon name="bell" size={18} color={totalAtencao>0?T.primary:"#fff"} />
+              <Icon name="bell" size={18} color={totalAtencao>0?"#1B2A4A":"#fff"} />
               {totalAtencao>0 && (
                 <span style={{ position:"absolute", top:-3, right:-3, background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:16, textAlign:"center" }}>{totalAtencao}</span>
               )}
@@ -2082,7 +2082,7 @@ export default function App() {
           <button key={key} onClick={() => setAba(key)}
             style={{
               background:"transparent", border:"none",
-              borderBottom:`2px solid ${aba===key?T.primary:"transparent"}`,
+              borderBottom:`2.5px solid ${aba===key?"#F5C518":"transparent"}`,
               color: aba===key ? T.primary : T.textMuted,
               cursor:"pointer", padding:"12px 18px", fontSize:13,
               fontWeight: aba===key ? 700 : 500,
@@ -2111,7 +2111,7 @@ export default function App() {
                 style={{
                   background: filtro===key ? cor+"22" : T.card,
                   border: `1.5px solid ${filtro===key ? cor : T.border}`,
-                  borderRadius:12, padding:"10px 14px", cursor:"pointer", textAlign:"left",
+                  borderRadius:14, padding:"10px 14px", cursor:"pointer", textAlign:"left",
                   minWidth:88, flexShrink:0,
                 }}>
                 <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, marginBottom:2, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
@@ -2184,7 +2184,7 @@ export default function App() {
                 <div key={p.id} style={{
                   background:T.card, border:`1px solid ${T.border}`,
                   borderLeft:`4px solid ${st.c}`,
-                  borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", gap:10,
+                  borderRadius:16, padding:"13px 15px", display:"flex", alignItems:"center", gap:10,
                   opacity:p.concluido?0.6:1,
                   boxShadow:"0 1px 3px #0000000a",
                 }}>
@@ -2366,12 +2366,12 @@ export default function App() {
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
           position:"fixed", bottom:20, right:20, zIndex:45,
-          width:56, height:56, borderRadius:"50%",
-          background:T.primary, border:"none", cursor:"pointer",
-          boxShadow:`0 8px 24px ${T.primary}66`,
+          width:56, height:56, borderRadius:18,
+          background:"#F5C518", border:"none", cursor:"pointer",
+          boxShadow:"0 8px 24px #F5C51855",
           display:"flex", alignItems:"center", justifyContent:"center",
         }}>
-        <Icon name="plus" size={28} color="#fff" />
+        <Icon name="plus" size={28} color="#1B2A4A" />
       </button>
 
       {/* ── OVERLAY ── */}
@@ -2601,7 +2601,7 @@ export default function App() {
                 }
                 setNovoFeriado({ data:"", nome:"" });
               }} style={{ ...BTN_PRIMARY, padding:"9px 14px", width:"100%", justifyContent:"center", marginBottom:14 }}>
-                <Icon name="plus" size={14} color="#fff" /> Adicionar
+                <Icon name="plus" size={14} color={T.primaryText} /> Adicionar
               </button>
               <div style={{ ...LBL, marginBottom:8 }}>{feriados.length} cadastrados</div>
               <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
@@ -2649,7 +2649,7 @@ export default function App() {
                 <thead>
                   <tr style={{ background:T.primary }}>
                     {["Parte","Tipo","Processo","Venc.","Dias","Status","Prior.","Resp.","Obs"].map(h => (
-                      <th key={h} style={{ padding:"8px 10px", textAlign:"left", color:"#fff", fontSize:10, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding:"8px 10px", textAlign:"left", color:T.primaryText, fontSize:10, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
