@@ -382,6 +382,12 @@ function isDiaUtil(dateStr) {
 }
 
 // ─── Helpers de data ──────────────────────────────────────────────────────────
+// Data ISO no fuso LOCAL (toISOString puro converte p/ UTC e vira o dia
+// seguinte entre 21h e 0h no Brasil).
+function isoLocal(d = new Date()) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 function diasUteisRestantes(dataStr) {
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const alvo = new Date(dataStr + "T00:00:00");
@@ -389,7 +395,7 @@ function diasUteisRestantes(dataStr) {
     let count = 0;
     const cur = new Date(alvo);
     while (cur < hoje) {
-      if (isDiaUtil(cur.toISOString().slice(0,10))) count--;
+      if (isDiaUtil(isoLocal(cur))) count--;
       cur.setDate(cur.getDate() + 1);
     }
     return count;
@@ -397,7 +403,7 @@ function diasUteisRestantes(dataStr) {
   let count = 0;
   const cur = new Date(hoje);
   while (cur < alvo) {
-    if (isDiaUtil(cur.toISOString().slice(0,10))) count++;
+    if (isDiaUtil(isoLocal(cur))) count++;
     cur.setDate(cur.getDate() + 1);
   }
   return count;
@@ -409,9 +415,9 @@ function calcularDataFinal(dataInicio, qtdDiasUteis) {
   if (isDiaUtil(dataInicio)) count = 1;
   while (count < qtdDiasUteis) {
     d.setDate(d.getDate() + 1);
-    if (isDiaUtil(d.toISOString().slice(0,10))) count++;
+    if (isDiaUtil(isoLocal(d))) count++;
   }
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 function calcStatus(dataStr, concluido) {
@@ -442,13 +448,16 @@ function fmtLong(s) {
 function gerarICS(prazo) {
   const [y,m,d] = prazo.dataLimite.split("-");
   const dt = `${y}${m}${d}`;
+  const fim = new Date(prazo.dataLimite + "T00:00:00");
+  fim.setDate(fim.getDate() + 1);
+  const dtFim = isoLocal(fim).replace(/-/g, "");
   const uid = `prazo-${prazo.id}-${Date.now()}@mcsadvogados`;
   const ics = [
     "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//MCS Advogados//Prazos//PT",
     "BEGIN:VEVENT", `UID:${uid}`,
     `SUMMARY:[Prazo] ${prazo.tipo} — ${prazo.parte}`,
     `DESCRIPTION:Processo: ${prazo.processo}\\nResp: ${prazo.responsavel}${prazo.obs?"\\nObs: "+prazo.obs:""}`,
-    `DTSTART;VALUE=DATE:${dt}`, `DTEND;VALUE=DATE:${dt}`,
+    `DTSTART;VALUE=DATE:${dt}`, `DTEND;VALUE=DATE:${dtFim}`,
     "BEGIN:VALARM","TRIGGER:-P1D","ACTION:DISPLAY","DESCRIPTION:Prazo amanhã!","END:VALARM",
     "END:VEVENT","END:VCALENDAR"
   ].join("\r\n");
@@ -530,8 +539,8 @@ function parsearComando(texto) {
       if ((words[i]==="em"||words[i]==="daqui") && /^\d+$/.test(words[i+1]) && (words[i+2]==="dias"||words[i+2]==="dia")) {
         const qtd = parseInt(words[i+1]);
         const isUtil = words[i+3]==="uteis" || words[i+3]==="util";
-        if (isUtil) dataLimite = calcularDataFinal(hoje.toISOString().slice(0,10), qtd);
-        else { const d = new Date(hoje); d.setDate(d.getDate()+qtd); dataLimite = d.toISOString().slice(0,10); }
+        if (isUtil) dataLimite = calcularDataFinal(isoLocal(hoje), qtd);
+        else { const d = new Date(hoje); d.setDate(d.getDate()+qtd); dataLimite = isoLocal(d); }
         break;
       }
     }
@@ -608,7 +617,7 @@ function proximaDataRecorrencia(dataAtual, recorrencia) {
   if (recorrencia === "bimestral")  d.setMonth(d.getMonth() + 2);
   if (recorrencia === "trimestral") d.setMonth(d.getMonth() + 3);
   if (recorrencia === "anual")      d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 // ─── Dados iniciais ───────────────────────────────────────────────────────────
@@ -716,7 +725,7 @@ function Calendario({ prazos, onEdit, onNovoData, feriadosNomes, T, modo, onToas
 
   const primeiroDia = new Date(ano, mes, 1).getDay();
   const totalDias = new Date(ano, mes+1, 0).getDate();
-  const hojeStr = hoje.toISOString().slice(0,10);
+  const hojeStr = isoLocal(hoje);
   const cells = [
     ...Array(primeiroDia).fill(null),
     ...Array.from({ length:totalDias }, (_,i) => {
@@ -865,10 +874,18 @@ function ListaTarefas({ tarefas, setTarefas, onEdit, onDelete, onToggle, T, modo
 
   const moveItem = (from, to) => {
     if (from === null || to === null || from === to) return;
-    const nova = [...tarefas];
-    const [m] = nova.splice(from, 1);
-    nova.splice(to, 0, m);
-    setTarefas(nova);
+    const idFrom = tarefas[from] && tarefas[from].id;
+    const idTo = tarefas[to] && tarefas[to].id;
+    if (idFrom === undefined || idTo === undefined) return;
+    setTarefas(prev => {
+      const nova = [...prev];
+      const iFrom = nova.findIndex(t => t.id === idFrom);
+      const iTo = nova.findIndex(t => t.id === idTo);
+      if (iFrom < 0 || iTo < 0) return prev;
+      const [m] = nova.splice(iFrom, 1);
+      nova.splice(iTo, 0, m);
+      return nova;
+    });
   };
 
   if (tarefas.length === 0)
@@ -1008,7 +1025,7 @@ function TelaLogin({ T, modo, onToast }) {
           </button>
         </div>
         <div style={{ marginTop:20, padding:"10px 12px", background:T.cardAlt, borderRadius:8, fontSize:11, color:T.textMuted, lineHeight:1.5 }}>
-          🔒 Seus dados ficam armazenados de forma segura no Firebase (Google) e sincronizam automaticamente em todos os seus dispositivos.
+          🔒 Seus dados ficam armazenados de forma segura no Supabase e sincronizam automaticamente em todos os seus dispositivos.
         </div>
       </div>
     </div>
@@ -1162,7 +1179,7 @@ function usePublicacoesDjen() {
       tribunal: tribunal ? tribunal.trim() : null,
       observacao: observacao ? observacao.trim() : null,
       acompanhar: true, status: "NOVO", prioridade: 5,
-      data_publicacao: new Date().toISOString().slice(0, 10),
+      data_publicacao: isoLocal(),
       gatilhos: "", medicamentos: "",
       texto_publicacao: "Processo adicionado manualmente para acompanhamento no DJEN.",
     };
@@ -1318,7 +1335,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 
   // Promover a Prazo: abre o formulário de novo prazo já preenchido
   const promoverPrazo = (pub) => {
-    const dataLimite = new Date(Date.now() + 5*86400000).toISOString().slice(0,10);
+    const dataLimite = isoLocal(new Date(Date.now() + 5*86400000));
     setForm({
       processo: pub.numero_processo || "",
       parte: "",  // você preenche
@@ -1334,7 +1351,6 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
     });
     setModal("novo");
     setAba("lista");
-    atualizarStatus(pub.id, "PROMOVIDO");
     setDetalhe(null);
     toast("Publicação promovida — confira o formulário","success");
   };
@@ -1392,6 +1408,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
           <option value="">Todas prio.</option>
           <option value="1">P1 Alta</option>
           <option value="2">P2 Média</option>
+          <option value="5">P5 Manual</option>
           <option value="9">P9 Baixa</option>
         </select>
         <button onClick={() => { setFormNovoProcesso({ numero_processo:"", tribunal:"", observacao:"" }); setModalNovoProcesso(true); }}
@@ -1848,7 +1865,7 @@ export default function App() {
   useEffect(() => { if (!shown.current) { shown.current = true; setResumoAberto(true); } }, []);
   useEffect(() => { setFeriadosGlobal(feriados); }, [feriados]);
 
-  const hoje = new Date().toISOString().slice(0,10);
+  const hoje = isoLocal();
   const todosOsTipos = [...TIPOS_DEFAULT, ...tiposCustom].sort((a,b) => a.localeCompare(b,"pt"));
   const prazosComStatus = useMemo(() => prazos.map(p => ({ ...p, status: calcStatus(p.dataLimite, p.concluido) })), [prazos]);
 
@@ -1898,7 +1915,11 @@ export default function App() {
   const openEdit = p => { setForm({...p}); setModal(p.id); };
   const salvar = () => {
     if (!form.processo || !form.dataLimite) return;
-    if (modal === "novo") { setPrazos(prev => [...prev, {...form, id:Date.now()}]); toast("Prazo criado","success"); }
+    if (modal === "novo") {
+      setPrazos(prev => [...prev, {...form, id:Date.now()}]);
+      if (form.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", form.djenId).then(() => {}); }
+      toast("Prazo criado","success");
+    }
     else { setPrazos(prev => prev.map(p => p.id === modal ? {...form, id:modal} : p)); toast("Prazo atualizado","success"); }
     setModal(null);
   };
@@ -2705,7 +2726,7 @@ export default function App() {
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {clientes.length === 0 && <div style={{ textAlign:"center", padding:20, color:T.textMuted, fontSize:13 }}>Nenhum cliente cadastrado.</div>}
                 {clientes.map(c => {
-                  const qtdPrazos = prazos.filter(p => p.parte === c.nome).length;
+                  const qtdPrazos = prazos.filter(p => p.parte === c.nome && !p.concluido).length;
                   return (
                     <div key={c.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 12px", display:"flex", alignItems:"center", gap:10 }}>
                       <div style={{ width:36, height:36, borderRadius:"50%", background:T.primarySoft, color:T.primary, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>
@@ -2754,7 +2775,7 @@ export default function App() {
               <div style={{ background:T.warnSoft+"55", border:`1px solid ${T.warn}33`, borderRadius:10, padding:"12px 14px", display:"flex", gap:10 }}>
                 <Icon name="alert" size={18} color={T.warn} />
                 <div style={{ fontSize:12, color:T.textSoft, lineHeight:1.5 }}>
-                  <strong style={{ color:T.text }}>Importante:</strong> os dados ficam salvos só neste navegador. Se limpar o cache ou trocar de dispositivo, perderá tudo. <strong>Faça backups regularmente</strong>.
+                  <strong style={{ color:T.text }}>Importante:</strong> os dados sincronizam com a nuvem (Supabase) entre seus dispositivos, mas o backup local é a segunda camada de proteção. <strong>Faça backups regularmente</strong>.
                 </div>
               </div>
 
