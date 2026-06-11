@@ -1877,7 +1877,7 @@ function ModalPrestadores({ T, toast, user, onClose }) {
     const digits = soDigitos(doc);
     if (digits.length !== 11 && digits.length !== 14) { toast("Informe um CNPJ (14 dígitos) ou CPF (11 dígitos)", "danger"); return; }
     const mail = email.trim();
-    if (!/.+@.+\..+/.test(mail)) { toast("E-mail inválido", "danger"); return; }
+    if (!mail.split(/[,;]+/).some(e => /.+@.+\..+/.test(e.trim()))) { toast("Informe pelo menos um e-mail válido", "danger"); return; }
     setSalvando(true);
     try {
       const sb = await initSupabase();
@@ -1941,7 +1941,7 @@ function ModalPrestadores({ T, toast, user, onClose }) {
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 <input value={doc} onChange={e => setDoc(e.target.value)} placeholder="CNPJ ou CPF" disabled={!!editId}
                   style={{ ...inputStyle, flex:"1 1 160px", opacity: editId ? 0.6 : 1 }} />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@prestador.com.br" style={{ ...inputStyle, flex:"2 1 220px" }} />
+                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@empresa.com.br ou email1, email2" style={{ ...inputStyle, flex:"2 1 220px" }} />
               </div>
               <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 {editId && (
@@ -2039,7 +2039,7 @@ function PainelAlvaras({ T, toast, user }) {
   const salvarEmail = async () => {
     if (!detalhe || !user) return;
     const email = emailNovo.trim();
-    if (!/.+@.+\..+/.test(email)) { toast("E-mail inválido", "danger"); return; }
+    if (!email.split(/[,;]+/).some(e => /.+@.+\..+/.test(e.trim()))) { toast("Informe pelo menos um e-mail válido", "danger"); return; }
     const digits = (detalhe.documento || "").replace(/\D/g, "");
     if (digits.length !== 11 && digits.length !== 14) {
       toast("Documento não identificado neste alvará", "danger"); return;
@@ -2216,10 +2216,10 @@ function PainelAlvaras({ T, toast, user }) {
                   <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
                     <div style={{ fontSize:11, color:T.textMuted, marginBottom:8 }}>
-                      Informe o e-mail do prestador para habilitar o envio (fica salvo para os próximos alvarás).
+                      Informe o(s) e-mail(s) do prestador para habilitar o envio (fica salvo para os próximos alvarás). Para múltiplos destinatários, separe por vírgula.
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
-                      <input type="email" value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br"
+                      <input value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br ou email1, email2"
                         style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text }} />
                       <button onClick={salvarEmail}
                         style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"0 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
