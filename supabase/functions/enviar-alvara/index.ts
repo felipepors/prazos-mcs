@@ -95,6 +95,16 @@ Deno.serve(async (req) => {
     const corpo = linhas.join("\n");
     const assunto = `Aviso de alvara expedido - processo ${alvara.processo || alvara.numero_alvara || ""}`.trim();
 
+    // Suporte a múltiplos destinatários: email_destino pode conter e-mails
+    // separados por vírgula ou ponto-e-vírgula (ex.: "a@x.com, b@x.com").
+    const destinatarios = alvara.email_destino
+      .split(/[,;]+/)
+      .map((e: string) => e.trim())
+      .filter((e: string) => e.includes("@"));
+    if (destinatarios.length === 0) {
+      return json({ error: "Nenhum e-mail válido em email_destino" }, 400);
+    }
+
     // Envio SMTP Locaweb. Remetente = conta autenticada (exigência da Locaweb).
     const client = new SMTPClient({
       connection: {
@@ -108,7 +118,7 @@ Deno.serve(async (req) => {
     try {
       await client.send({
         from: REMETENTE,
-        to: alvara.email_destino,
+        to: destinatarios,
         subject: assunto,
         content: corpo,
       });
@@ -130,7 +140,7 @@ Deno.serve(async (req) => {
       }, 200);
     }
 
-    return json({ ok: true, status: "enviado", email_destino: alvara.email_destino }, 200);
+    return json({ ok: true, status: "enviado", email_destino: destinatarios }, 200);
   } catch (e) {
     return json({ error: String(e instanceof Error ? e.message : e) }, 500);
   }
