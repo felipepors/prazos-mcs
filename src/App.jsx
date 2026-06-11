@@ -2009,7 +2009,18 @@ function PainelAlvaras({ T, toast, user }) {
   const [enviando, setEnviando] = useState(false);
   const [emailNovo, setEmailNovo] = useState("");
   const [verPrestadores, setVerPrestadores] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
   const fileRef = useRef(null);
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setArrastando(false);
+    if (subindo) return;
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) subir(file);
+  };
+  const onDragOver = (e) => { e.preventDefault(); if (!subindo) setArrastando(true); };
+  const onDragLeave = (e) => { e.preventDefault(); if (e.currentTarget === e.target) setArrastando(false); };
 
   const subir = async (file) => {
     if (!file || !user) return;
@@ -2099,7 +2110,21 @@ function PainelAlvaras({ T, toast, user }) {
   };
 
   return (
-    <div style={{ padding:"16px 16px 80px" }}>
+    <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+      style={{ padding:"16px 16px 80px", position:"relative",
+        outline: arrastando ? "2px dashed #F5C518" : "none",
+        outlineOffset: -8, borderRadius:14,
+        background: arrastando ? "rgba(245,197,24,0.06)" : "transparent",
+        transition:"background 0.12s" }}>
+      {arrastando && (
+        <div style={{ position:"absolute", inset:8, display:"flex", alignItems:"center", justifyContent:"center",
+          pointerEvents:"none", zIndex:5 }}>
+          <div style={{ background:"#1B2A4A", color:"#F5C518", padding:"10px 18px", borderRadius:12,
+            fontSize:14, fontWeight:700, boxShadow:T.shadowSm }}>
+            Solte o PDF do alvará aqui
+          </div>
+        </div>
+      )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14, flexWrap:"wrap" }}>
         <div>
           <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Alvarás</h2>
@@ -2128,7 +2153,7 @@ function PainelAlvaras({ T, toast, user }) {
         <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13 }}>Carregando alvarás…</div>
       ) : items.length === 0 ? (
         <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13, border:`1px dashed ${T.border}`, borderRadius:14 }}>
-          Nenhum alvará ainda. Clique em “Enviar PDF de alvará” para começar.
+          Nenhum alvará ainda. Arraste um PDF para esta área ou clique em “Enviar PDF de alvará” para começar.
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
