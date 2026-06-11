@@ -1783,6 +1783,484 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ABA ALVARÁS (alvara-notifier) — upload, revisão e envio do aviso ao prestador
+// ═══════════════════════════════════════════════════════════════════════════
+const STATUS_ALVARA = {
+  extraido:             { label:"Extraído",             cor:"#6b7280" },
+  aguardando_aprovacao: { label:"Aguardando aprovação", cor:"#B8860B" },
+  enviado:              { label:"Enviado",              cor:"#2E7D32" },
+};
+
+function brlCentavos(c) {
+  return "R$ " + ((c ?? 0) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Documento (CNPJ/CPF) — armazenamos só dígitos; formatamos só na exibição.
+function soDigitos(s) { return (s || "").replace(/\D/g, ""); }
+function fmtDoc(d) {
+  const x = soDigitos(d);
+  if (x.length === 14) return x.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+  if (x.length === 11) return x.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  return d || "";
+}
+function tipoDoc(d) {
+  const n = soDigitos(d).length;
+  return n === 14 ? "CNPJ" : n === 11 ? "CPF" : "DESCONHECIDO";
+}
+
+// Prévia do e-mail — espelha o corpo montado pela função enviar-alvara (Passo 6).
+function corpoEmailAlvara(a) {
+  return [
+    `Prezado(a) ${a.prestador || "prestador"},`,
+    ``,
+    `Informamos que foi expedido alvará judicial em seu favor nos autos do processo ${a.processo || "-"}.`,
+    ``,
+    `Alvará n.: ${a.numero_alvara || "-"}`,
+    `Valor bruto: ${brlCentavos(a.valor_bruto_centavos)}`,
+    `Valor líquido creditado: ${brlCentavos(a.valor_liquido_creditado_centavos)}`,
+    `Data do creditamento: ${fmt(a.data_creditamento)}`,
+    `Conta de crédito: banco ${a.banco || "-"}, agência ${a.agencia || "-"}, conta ${a.conta || "-"}`,
+    ``,
+    `Atenciosamente,`,
+    `Martins, Corrêa da Silva Advogados`,
+  ].join("\n");
+}
+
+function useAlvaras(userId) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const carregar = async () => {
+    const sb = await initSupabase();
+    if (!sb) { setLoading(false); return; }
+    const { data, error } = await sb.from("alvaras").select("*").order("criado_em", { ascending: false });
+    if (!error) setItems(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  return { items, loading, carregar };
+}
+
+// Extrai a mensagem de erro do corpo JSON de uma Edge Function (supabase-js).
+async function msgErroFn(error) {
+  let m = error?.message || "erro";
+  try { const b = await error.context.json(); if (b?.error) m = b.error; } catch (e) {}
+  return m;
+}
+
+// Cadastro proativo de prestadores (CNPJ/CPF → e-mail). Alimenta o auto-match
+// da Edge Function processar-alvara: alvará de documento já cadastrado entra
+// com o e-mail preenchido, sem digitar nada na revisão.
+function ModalPrestadores({ T, toast, user, onClose }) {
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [nome, setNome] = useState("");
+  const [doc, setDoc] = useState("");
+  const [email, setEmail] = useState("");
+
+  const carregar = async () => {
+    const sb = await initSupabase();
+    if (!sb) { setLoading(false); return; }
+    const { data, error } = await sb.from("prestadores").select("*").order("nome", { ascending: true });
+    if (!error) setLista(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const limpar = () => { setEditId(null); setNome(""); setDoc(""); setEmail(""); };
+
+  const salvar = async () => {
+    if (!user) return;
+    const digits = soDigitos(doc);
+    if (digits.length !== 11 && digits.length !== 14) { toast("Informe um CNPJ (14 dígitos) ou CPF (11 dígitos)", "danger"); return; }
+    const mail = email.trim();
+    if (!/.+@.+\..+/.test(mail)) { toast("E-mail inválido", "danger"); return; }
+    setSalvando(true);
+    try {
+      const sb = await initSupabase();
+      const { error } = await sb.from("prestadores").upsert(
+        { user_id: user.id, documento: digits, documento_tipo: tipoDoc(digits), nome: nome.trim() || null, email: mail },
+        { onConflict: "user_id,documento" },
+      );
+      if (error) throw new Error(error.message);
+      toast(editId ? "Prestador atualizado" : "Prestador cadastrado", "success");
+      limpar();
+      await carregar();
+    } catch (e) {
+      toast("Falha ao salvar: " + (e.message || e), "danger");
+    } finally { setSalvando(false); }
+  };
+
+  const editar = (p) => { setEditId(p.id); setNome(p.nome || ""); setDoc(fmtDoc(p.documento)); setEmail(p.email || ""); };
+
+  const excluir = async (p) => {
+    if (!window.confirm(`Excluir o prestador ${p.nome || fmtDoc(p.documento)}?\nAlvarás já enviados não são afetados.`)) return;
+    const sb = await initSupabase();
+    const { error } = await sb.from("prestadores").delete().eq("id", p.id);
+    if (error) { toast("Falha ao excluir: " + error.message, "danger"); return; }
+    toast("Prestador excluído", "success");
+    if (editId === p.id) limpar();
+    carregar();
+  };
+
+  const filtrada = lista.filter(p => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return true;
+    return (p.nome || "").toLowerCase().includes(q) || soDigitos(p.documento).includes(soDigitos(q)) || (p.email || "").toLowerCase().includes(q);
+  });
+
+  const inputStyle = { background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text };
+
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:320, display:"flex",
+        alignItems:"flex-start", justifyContent:"center", padding:"40px 12px", overflowY:"auto" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:620,
+          boxShadow:"0 12px 40px rgba(0,0,0,0.35)", border:`1px solid ${T.border}` }}>
+        <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Prestadores cadastrados</div>
+            <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>O e-mail é preenchido sozinho quando chega um alvará do mesmo CNPJ/CPF</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", display:"flex" }}>
+            <Icon name="close" size={18} color={T.textMuted} />
+          </button>
+        </div>
+
+        <div style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
+            <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:8, textTransform:"uppercase", letterSpacing:0.4 }}>
+              {editId ? "Editar prestador" : "Novo prestador"}
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome / razão social (opcional)" style={inputStyle} />
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <input value={doc} onChange={e => setDoc(e.target.value)} placeholder="CNPJ ou CPF" disabled={!!editId}
+                  style={{ ...inputStyle, flex:"1 1 160px", opacity: editId ? 0.6 : 1 }} />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@prestador.com.br" style={{ ...inputStyle, flex:"2 1 220px" }} />
+              </div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                {editId && (
+                  <button onClick={limpar} style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:9, padding:"9px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                    Cancelar
+                  </button>
+                )}
+                <button onClick={salvar} disabled={salvando}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:700, cursor: salvando ? "wait" : "pointer", opacity: salvando ? 0.7 : 1 }}>
+                  <Icon name={editId ? "check" : "plus"} size={14} color={T.primaryText} />
+                  {salvando ? "Salvando…" : editId ? "Salvar" : "Adicionar"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {lista.length > 3 && (
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, documento ou e-mail" style={inputStyle} />
+          )}
+
+          {loading ? (
+            <div style={{ padding:24, textAlign:"center", color:T.textMuted, fontSize:13 }}>Carregando…</div>
+          ) : filtrada.length === 0 ? (
+            <div style={{ padding:24, textAlign:"center", color:T.textMuted, fontSize:13, border:`1px dashed ${T.border}`, borderRadius:12 }}>
+              {lista.length === 0 ? "Nenhum prestador cadastrado ainda." : "Nenhum prestador para esta busca."}
+            </div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:340, overflowY:"auto" }}>
+              {filtrada.map(p => (
+                <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:11, padding:"10px 12px" }}>
+                  <div style={{ minWidth:0, flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {p.nome || fmtDoc(p.documento)}
+                    </div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {fmtDoc(p.documento)} · {p.email}
+                    </div>
+                  </div>
+                  <button onClick={() => editar(p)} title="Editar" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", padding:4 }}>
+                    <Icon name="edit" size={16} color={T.textMuted} />
+                  </button>
+                  <button onClick={() => excluir(p)} title="Excluir" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", padding:4 }}>
+                    <Icon name="trash" size={16} color="#B00020" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.border}`, display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:10, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PainelAlvaras({ T, toast, user }) {
+  const { items, loading, carregar } = useAlvaras(user?.id);
+  const [detalhe, setDetalhe] = useState(null);
+  const [subindo, setSubindo] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [emailNovo, setEmailNovo] = useState("");
+  const [verPrestadores, setVerPrestadores] = useState(false);
+  const fileRef = useRef(null);
+
+  const subir = async (file) => {
+    if (!file || !user) return;
+    if (file.type && file.type !== "application/pdf") { toast("Envie um arquivo PDF", "danger"); return; }
+    setSubindo(true);
+    try {
+      const sb = await initSupabase();
+      const safe = file.name.replace(/[^\w.\-]+/g, "_");
+      const path = `${user.id}/${Date.now()}-${safe}`;
+      const { error: upErr } = await sb.storage.from("alvaras").upload(path, file, { contentType: "application/pdf", upsert: false });
+      if (upErr) throw new Error(upErr.message);
+      const { data, error: fnErr } = await sb.functions.invoke("processar-alvara", { body: { storage_path: path } });
+      if (fnErr) throw new Error(await msgErroFn(fnErr));
+      if (data?.error) throw new Error(data.error);
+      toast("Alvará processado — revise e aprove", "success");
+      await carregar();
+      if (data?.alvara) { setDetalhe(data.alvara); setEmailNovo(""); }
+    } catch (e) {
+      toast("Falha ao processar: " + (e.message || e), "danger");
+    } finally {
+      setSubindo(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  // Fluxo "CNPJ novo → cadastrar e-mail": grava em prestadores e vincula ao alvará.
+  const salvarEmail = async () => {
+    if (!detalhe || !user) return;
+    const email = emailNovo.trim();
+    if (!/.+@.+\..+/.test(email)) { toast("E-mail inválido", "danger"); return; }
+    const digits = (detalhe.documento || "").replace(/\D/g, "");
+    if (digits.length !== 11 && digits.length !== 14) {
+      toast("Documento não identificado neste alvará", "danger"); return;
+    }
+    const sb = await initSupabase();
+    const { data: prest, error } = await sb.from("prestadores")
+      .upsert(
+        { user_id: user.id, documento: digits, documento_tipo: detalhe.documento_tipo, nome: detalhe.prestador, email },
+        { onConflict: "user_id,documento" },
+      )
+      .select().single();
+    if (error) { toast("Falha ao salvar e-mail: " + error.message, "danger"); return; }
+    const { error: upErr } = await sb.from("alvaras")
+      .update({ email_destino: email, prestador_id: prest.id }).eq("id", detalhe.id);
+    if (upErr) { toast("Falha ao vincular: " + upErr.message, "danger"); return; }
+    toast("E-mail do prestador cadastrado", "success");
+    setDetalhe({ ...detalhe, email_destino: email, prestador_id: prest.id });
+    carregar();
+  };
+
+  // Envio (Passo 6) — só dispara no clique. Marca 'enviado' no sucesso.
+  const enviar = async () => {
+    if (!detalhe) return;
+    if (!detalhe.email_destino) { toast("Cadastre o e-mail do prestador antes de enviar", "danger"); return; }
+    setEnviando(true);
+    try {
+      const sb = await initSupabase();
+      const { data, error } = await sb.functions.invoke("enviar-alvara", { body: { alvara_id: detalhe.id } });
+      if (error) throw new Error(await msgErroFn(error));
+      if (data?.error) throw new Error(data.error);
+      toast("E-mail enviado ao prestador", "success");
+      await carregar();
+      setDetalhe(null);
+    } catch (e) {
+      toast("Falha no envio: " + (e.message || e), "danger");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  // Exclui o alvará (qualquer status, inclusive 'enviado') + o PDF no bucket.
+  const excluirAlvara = async (a) => {
+    if (!a) return;
+    const aviso = a.status === "enviado" ? " (o e-mail já enviado não é desfeito)" : "";
+    if (!window.confirm(`Excluir este alvará${aviso}?\nEsta ação não pode ser desfeita.`)) return;
+    try {
+      const sb = await initSupabase();
+      if (a.pdf_path) { try { await sb.storage.from("alvaras").remove([a.pdf_path]); } catch (_) {} }
+      const { error } = await sb.from("alvaras").delete().eq("id", a.id);
+      if (error) throw new Error(error.message);
+      toast("Alvará excluído", "success");
+      setDetalhe(null);
+      await carregar();
+    } catch (e) {
+      toast("Falha ao excluir: " + (e.message || e), "danger");
+    }
+  };
+
+  return (
+    <div style={{ padding:"16px 16px 80px" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Alvarás</h2>
+          <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+            {items.length} alvará(s) · suba o PDF para extrair e preparar o aviso
+          </div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <button onClick={() => setVerPrestadores(true)}
+            style={{ display:"inline-flex", alignItems:"center", gap:7, background:"transparent", color:T.text,
+              border:`1px solid ${T.border}`, padding:"10px 14px", borderRadius:12, cursor:"pointer", fontSize:13, fontWeight:600 }}>
+            <Icon name="user" size={15} color={T.text} />
+            Prestadores
+          </button>
+          <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#F5C518", color:"#1B2A4A",
+            padding:"10px 16px", borderRadius:12, cursor: subindo ? "wait" : "pointer", fontSize:13, fontWeight:700, opacity: subindo ? 0.7 : 1 }}>
+            <Icon name="plus" size={15} color="#1B2A4A" />
+            {subindo ? "Processando…" : "Enviar PDF de alvará"}
+            <input ref={fileRef} type="file" accept="application/pdf" disabled={subindo}
+              onChange={e => subir(e.target.files && e.target.files[0])} style={{ display:"none" }} />
+          </label>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13 }}>Carregando alvarás…</div>
+      ) : items.length === 0 ? (
+        <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13, border:`1px dashed ${T.border}`, borderRadius:14 }}>
+          Nenhum alvará ainda. Clique em “Enviar PDF de alvará” para começar.
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {items.map(a => {
+            const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
+            return (
+              <button key={a.id} onClick={() => { setDetalhe(a); setEmailNovo(""); }}
+                style={{ textAlign:"left", background:T.card, border:`1px solid ${T.border}`, borderRadius:14,
+                  padding:"14px 16px", cursor:"pointer", boxShadow:T.shadowSm, display:"flex",
+                  alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    {a.prestador || "—"}
+                  </div>
+                  <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+                    {a.documento || ""} · proc. {a.processo || "—"}
+                  </div>
+                  <div style={{ fontSize:13, color:T.text, marginTop:5, fontWeight:600 }}>
+                    Líquido: {brlCentavos(a.valor_liquido_creditado_centavos)}
+                  </div>
+                </div>
+                <span style={{ flexShrink:0, fontSize:10, fontWeight:700, color:"#fff", background:st.cor,
+                  padding:"4px 9px", borderRadius:20, whiteSpace:"nowrap" }}>{st.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {detalhe && (() => {
+        const a = detalhe;
+        const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
+        const semEmail = !a.email_destino;
+        const enviado = a.status === "enviado";
+        const bloqueado = enviado || semEmail || enviando;
+        return (
+          <div onClick={() => setDetalhe(null)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex",
+              alignItems:"flex-start", justifyContent:"center", padding:"40px 12px", overflowY:"auto" }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:560,
+                boxShadow:"0 12px 40px rgba(0,0,0,0.35)", border:`1px solid ${T.border}` }}>
+              <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Revisão do alvará</div>
+                <button onClick={() => setDetalhe(null)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex" }}>
+                  <Icon name="close" size={18} color={T.textMuted} />
+                </button>
+              </div>
+
+              <div style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:"#fff", background:st.cor, padding:"4px 9px", borderRadius:20 }}>{st.label}</span>
+                  <span style={{ fontSize:11, color: a.documento_valido ? "#2E7D32" : "#B00020", fontWeight:600 }}>
+                    {a.documento_tipo}{a.documento_valido ? " válido" : " — confira"}
+                  </span>
+                </div>
+
+                {[
+                  ["Prestador", a.prestador],
+                  ["Documento", a.documento],
+                  ["Processo", a.processo],
+                  ["Alvará nº", a.numero_alvara],
+                  ["Valor bruto", brlCentavos(a.valor_bruto_centavos)],
+                  ["Despesa bancária", brlCentavos(a.despesa_bancaria_centavos)],
+                  ["Imposto de renda", brlCentavos(a.imposto_renda_centavos)],
+                  ["Valor líquido creditado", brlCentavos(a.valor_liquido_creditado_centavos)],
+                  ["Creditado em", fmt(a.data_creditamento)],
+                  ["Conta", `banco ${a.banco || "-"} · ag. ${a.agencia || "-"} · c/c ${a.conta || "-"}`],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", gap:10, fontSize:13 }}>
+                    <span style={{ color:T.textMuted }}>{k}</span>
+                    <span style={{ color:T.text, fontWeight:600, textAlign:"right" }}>{v || "—"}</span>
+                  </div>
+                ))}
+
+                <div style={{ marginTop:6 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:0.4 }}>
+                    Prévia do e-mail {a.email_destino ? `→ ${a.email_destino}` : ""}
+                  </div>
+                  <pre style={{ margin:0, background:T.cardAlt, borderRadius:10, padding:"12px 14px", fontSize:12,
+                    color:T.text, whiteSpace:"pre-wrap", fontFamily:"inherit", border:`1px solid ${T.border}` }}>{corpoEmailAlvara(a)}</pre>
+                </div>
+
+                {semEmail && !enviado && (
+                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:8 }}>
+                      Informe o e-mail do prestador para habilitar o envio (fica salvo para os próximos alvarás).
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <input type="email" value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br"
+                        style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text }} />
+                      <button onClick={salvarEmail}
+                        style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"0 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+                <button onClick={() => excluirAlvara(a)}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:"transparent",
+                    border:"1px solid #e0a0a0", color:"#B00020", borderRadius:10, padding:"9px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                  <Icon name="trash" size={15} color="#B00020" /> Excluir
+                </button>
+                <div style={{ display:"flex", gap:10 }}>
+                  <button onClick={() => setDetalhe(null)}
+                    style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:10, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                    Fechar
+                  </button>
+                  <button onClick={enviar} disabled={bloqueado}
+                    style={{ display:"inline-flex", alignItems:"center", gap:7,
+                      background: bloqueado ? T.border : "#F5C518", color: bloqueado ? T.textMuted : "#1B2A4A",
+                      border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700,
+                      cursor: bloqueado ? "not-allowed" : "pointer" }}>
+                    <Icon name="mail" size={15} color={bloqueado ? T.textMuted : "#1B2A4A"} />
+                    {enviado ? "Já enviado" : enviando ? "Enviando…" : "Enviar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {verPrestadores && <ModalPrestadores T={T} toast={toast} user={user} onClose={() => setVerPrestadores(false)} />}
+    </div>
+  );
+}
+
 export default function App() {
   // Tema
   const [modo, setModo] = useStorage("mcs.modo", "light");
@@ -2078,6 +2556,7 @@ export default function App() {
           { key:"calendario", label:"Calendário", ico:"calendar" },
           { key:"tarefas",    label:"Tarefas",    ico:"check" },
           { key:"djen",       label:"DJEN",       ico:"flag" },
+          { key:"alvaras",    label:"Alvarás",    ico:"mail" },
         ].map(({ key, label, ico }) => (
           <button key={key} onClick={() => setAba(key)}
             style={{
@@ -2362,6 +2841,10 @@ export default function App() {
                     irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
       )}
 
+      {/* ══ ABA ALVARÁS ══ */}
+      {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
+
+      {aba !== "alvaras" && (
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
@@ -2373,6 +2856,7 @@ export default function App() {
         }}>
         <Icon name="plus" size={28} color="#1B2A4A" />
       </button>
+      )}
 
       {/* ── OVERLAY ── */}
       {hasOverlay && <div onClick={() => setMenuMobile(false)} style={{ position:"fixed", inset:0, background:T.overlay, backdropFilter:"blur(2px)", zIndex:100 }} />}
