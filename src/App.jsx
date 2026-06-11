@@ -1783,6 +1783,281 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ABA ALVARÁS (alvara-notifier) — upload, revisão e envio do aviso ao prestador
+// ═══════════════════════════════════════════════════════════════════════════
+const STATUS_ALVARA = {
+  extraido:             { label:"Extraído",             cor:"#6b7280" },
+  aguardando_aprovacao: { label:"Aguardando aprovação", cor:"#B8860B" },
+  enviado:              { label:"Enviado",              cor:"#2E7D32" },
+};
+
+function brlCentavos(c) {
+  return "R$ " + ((c ?? 0) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Prévia do e-mail — espelha o corpo montado pela função enviar-alvara (Passo 6).
+function corpoEmailAlvara(a) {
+  return [
+    `Prezado(a) ${a.prestador || "prestador"},`,
+    ``,
+    `Informamos que foi expedido alvará judicial em seu favor nos autos do processo ${a.processo || "-"}.`,
+    ``,
+    `Alvará n.: ${a.numero_alvara || "-"}`,
+    `Valor bruto: ${brlCentavos(a.valor_bruto_centavos)}`,
+    `Valor líquido creditado: ${brlCentavos(a.valor_liquido_creditado_centavos)}`,
+    `Data do creditamento: ${fmt(a.data_creditamento)}`,
+    `Conta de crédito: banco ${a.banco || "-"}, agência ${a.agencia || "-"}, conta ${a.conta || "-"}`,
+    ``,
+    `Atenciosamente,`,
+    `Martins, Corrêa da Silva Advogados`,
+  ].join("\n");
+}
+
+function useAlvaras(userId) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const carregar = async () => {
+    const sb = await initSupabase();
+    if (!sb) { setLoading(false); return; }
+    const { data, error } = await sb.from("alvaras").select("*").order("criado_em", { ascending: false });
+    if (!error) setItems(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  return { items, loading, carregar };
+}
+
+// Extrai a mensagem de erro do corpo JSON de uma Edge Function (supabase-js).
+async function msgErroFn(error) {
+  let m = error?.message || "erro";
+  try { const b = await error.context.json(); if (b?.error) m = b.error; } catch (e) {}
+  return m;
+}
+
+function PainelAlvaras({ T, toast, user }) {
+  const { items, loading, carregar } = useAlvaras(user?.id);
+  const [detalhe, setDetalhe] = useState(null);
+  const [subindo, setSubindo] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [emailNovo, setEmailNovo] = useState("");
+  const fileRef = useRef(null);
+
+  const subir = async (file) => {
+    if (!file || !user) return;
+    if (file.type && file.type !== "application/pdf") { toast("Envie um arquivo PDF", "danger"); return; }
+    setSubindo(true);
+    try {
+      const sb = await initSupabase();
+      const safe = file.name.replace(/[^\w.\-]+/g, "_");
+      const path = `${user.id}/${Date.now()}-${safe}`;
+      const { error: upErr } = await sb.storage.from("alvaras").upload(path, file, { contentType: "application/pdf", upsert: false });
+      if (upErr) throw new Error(upErr.message);
+      const { data, error: fnErr } = await sb.functions.invoke("processar-alvara", { body: { storage_path: path } });
+      if (fnErr) throw new Error(await msgErroFn(fnErr));
+      if (data?.error) throw new Error(data.error);
+      toast("Alvará processado — revise e aprove", "success");
+      await carregar();
+      if (data?.alvara) { setDetalhe(data.alvara); setEmailNovo(""); }
+    } catch (e) {
+      toast("Falha ao processar: " + (e.message || e), "danger");
+    } finally {
+      setSubindo(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  // Fluxo "CNPJ novo → cadastrar e-mail": grava em prestadores e vincula ao alvará.
+  const salvarEmail = async () => {
+    if (!detalhe || !user) return;
+    const email = emailNovo.trim();
+    if (!/.+@.+\..+/.test(email)) { toast("E-mail inválido", "danger"); return; }
+    const digits = (detalhe.documento || "").replace(/\D/g, "");
+    if (digits.length !== 11 && digits.length !== 14) {
+      toast("Documento não identificado neste alvará", "danger"); return;
+    }
+    const sb = await initSupabase();
+    const { data: prest, error } = await sb.from("prestadores")
+      .upsert(
+        { user_id: user.id, documento: digits, documento_tipo: detalhe.documento_tipo, nome: detalhe.prestador, email },
+        { onConflict: "user_id,documento" },
+      )
+      .select().single();
+    if (error) { toast("Falha ao salvar e-mail: " + error.message, "danger"); return; }
+    const { error: upErr } = await sb.from("alvaras")
+      .update({ email_destino: email, prestador_id: prest.id }).eq("id", detalhe.id);
+    if (upErr) { toast("Falha ao vincular: " + upErr.message, "danger"); return; }
+    toast("E-mail do prestador cadastrado", "success");
+    setDetalhe({ ...detalhe, email_destino: email, prestador_id: prest.id });
+    carregar();
+  };
+
+  // Envio (Passo 6) — só dispara no clique. Marca 'enviado' no sucesso.
+  const enviar = async () => {
+    if (!detalhe) return;
+    if (!detalhe.email_destino) { toast("Cadastre o e-mail do prestador antes de enviar", "danger"); return; }
+    setEnviando(true);
+    try {
+      const sb = await initSupabase();
+      const { data, error } = await sb.functions.invoke("enviar-alvara", { body: { alvara_id: detalhe.id } });
+      if (error) throw new Error(await msgErroFn(error));
+      if (data?.error) throw new Error(data.error);
+      toast("E-mail enviado ao prestador", "success");
+      await carregar();
+      setDetalhe(null);
+    } catch (e) {
+      toast("Falha no envio: " + (e.message || e), "danger");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{ padding:"16px 16px 80px" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Alvarás</h2>
+          <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+            {items.length} alvará(s) · suba o PDF para extrair e preparar o aviso
+          </div>
+        </div>
+        <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#F5C518", color:"#1B2A4A",
+          padding:"10px 16px", borderRadius:12, cursor: subindo ? "wait" : "pointer", fontSize:13, fontWeight:700, opacity: subindo ? 0.7 : 1 }}>
+          <Icon name="plus" size={15} color="#1B2A4A" />
+          {subindo ? "Processando…" : "Enviar PDF de alvará"}
+          <input ref={fileRef} type="file" accept="application/pdf" disabled={subindo}
+            onChange={e => subir(e.target.files && e.target.files[0])} style={{ display:"none" }} />
+        </label>
+      </div>
+
+      {loading ? (
+        <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13 }}>Carregando alvarás…</div>
+      ) : items.length === 0 ? (
+        <div style={{ padding:40, textAlign:"center", color:T.textMuted, fontSize:13, border:`1px dashed ${T.border}`, borderRadius:14 }}>
+          Nenhum alvará ainda. Clique em “Enviar PDF de alvará” para começar.
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {items.map(a => {
+            const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
+            return (
+              <button key={a.id} onClick={() => { setDetalhe(a); setEmailNovo(""); }}
+                style={{ textAlign:"left", background:T.card, border:`1px solid ${T.border}`, borderRadius:14,
+                  padding:"14px 16px", cursor:"pointer", boxShadow:T.shadowSm, display:"flex",
+                  alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    {a.prestador || "—"}
+                  </div>
+                  <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+                    {a.documento || ""} · proc. {a.processo || "—"}
+                  </div>
+                  <div style={{ fontSize:13, color:T.text, marginTop:5, fontWeight:600 }}>
+                    Líquido: {brlCentavos(a.valor_liquido_creditado_centavos)}
+                  </div>
+                </div>
+                <span style={{ flexShrink:0, fontSize:10, fontWeight:700, color:"#fff", background:st.cor,
+                  padding:"4px 9px", borderRadius:20, whiteSpace:"nowrap" }}>{st.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {detalhe && (() => {
+        const a = detalhe;
+        const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
+        const semEmail = !a.email_destino;
+        const enviado = a.status === "enviado";
+        const bloqueado = enviado || semEmail || enviando;
+        return (
+          <div onClick={() => setDetalhe(null)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex",
+              alignItems:"flex-start", justifyContent:"center", padding:"40px 12px", overflowY:"auto" }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:560,
+                boxShadow:"0 12px 40px rgba(0,0,0,0.35)", border:`1px solid ${T.border}` }}>
+              <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Revisão do alvará</div>
+                <button onClick={() => setDetalhe(null)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex" }}>
+                  <Icon name="close" size={18} color={T.textMuted} />
+                </button>
+              </div>
+
+              <div style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:"#fff", background:st.cor, padding:"4px 9px", borderRadius:20 }}>{st.label}</span>
+                  <span style={{ fontSize:11, color: a.documento_valido ? "#2E7D32" : "#B00020", fontWeight:600 }}>
+                    {a.documento_tipo}{a.documento_valido ? " válido" : " — confira"}
+                  </span>
+                </div>
+
+                {[
+                  ["Prestador", a.prestador],
+                  ["Documento", a.documento],
+                  ["Processo", a.processo],
+                  ["Alvará nº", a.numero_alvara],
+                  ["Valor bruto", brlCentavos(a.valor_bruto_centavos)],
+                  ["Despesa bancária", brlCentavos(a.despesa_bancaria_centavos)],
+                  ["Imposto de renda", brlCentavos(a.imposto_renda_centavos)],
+                  ["Valor líquido creditado", brlCentavos(a.valor_liquido_creditado_centavos)],
+                  ["Creditado em", fmt(a.data_creditamento)],
+                  ["Conta", `banco ${a.banco || "-"} · ag. ${a.agencia || "-"} · c/c ${a.conta || "-"}`],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", gap:10, fontSize:13 }}>
+                    <span style={{ color:T.textMuted }}>{k}</span>
+                    <span style={{ color:T.text, fontWeight:600, textAlign:"right" }}>{v || "—"}</span>
+                  </div>
+                ))}
+
+                <div style={{ marginTop:6 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:0.4 }}>
+                    Prévia do e-mail {a.email_destino ? `→ ${a.email_destino}` : ""}
+                  </div>
+                  <pre style={{ margin:0, background:T.cardAlt, borderRadius:10, padding:"12px 14px", fontSize:12,
+                    color:T.text, whiteSpace:"pre-wrap", fontFamily:"inherit", border:`1px solid ${T.border}` }}>{corpoEmailAlvara(a)}</pre>
+                </div>
+
+                {semEmail && !enviado && (
+                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
+                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:8 }}>
+                      Informe o e-mail do prestador para habilitar o envio (fica salvo para os próximos alvarás).
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <input type="email" value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br"
+                        style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text }} />
+                      <button onClick={salvarEmail}
+                        style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"0 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding:"14px 18px", borderTop:`1px solid ${T.border}`, display:"flex", justifyContent:"flex-end", gap:10 }}>
+                <button onClick={() => setDetalhe(null)}
+                  style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:10, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                  Fechar
+                </button>
+                <button onClick={enviar} disabled={bloqueado}
+                  style={{ display:"inline-flex", alignItems:"center", gap:7,
+                    background: bloqueado ? T.border : "#F5C518", color: bloqueado ? T.textMuted : "#1B2A4A",
+                    border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700,
+                    cursor: bloqueado ? "not-allowed" : "pointer" }}>
+                  <Icon name="mail" size={15} color={bloqueado ? T.textMuted : "#1B2A4A"} />
+                  {enviado ? "Já enviado" : enviando ? "Enviando…" : "Enviar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 export default function App() {
   // Tema
   const [modo, setModo] = useStorage("mcs.modo", "light");
@@ -2078,6 +2353,7 @@ export default function App() {
           { key:"calendario", label:"Calendário", ico:"calendar" },
           { key:"tarefas",    label:"Tarefas",    ico:"check" },
           { key:"djen",       label:"DJEN",       ico:"flag" },
+          { key:"alvaras",    label:"Alvarás",    ico:"mail" },
         ].map(({ key, label, ico }) => (
           <button key={key} onClick={() => setAba(key)}
             style={{
@@ -2362,6 +2638,10 @@ export default function App() {
                     irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
       )}
 
+      {/* ══ ABA ALVARÁS ══ */}
+      {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
+
+      {aba !== "alvaras" && (
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
@@ -2373,6 +2653,7 @@ export default function App() {
         }}>
         <Icon name="plus" size={28} color="#1B2A4A" />
       </button>
+      )}
 
       {/* ── OVERLAY ── */}
       {hasOverlay && <div onClick={() => setMenuMobile(false)} style={{ position:"fixed", inset:0, background:T.overlay, backdropFilter:"blur(2px)", zIndex:100 }} />}
