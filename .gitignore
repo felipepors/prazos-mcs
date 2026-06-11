@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Segredos — NUNCA commitar (regra de ouro nº 2)
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+credentials*.json
+service-account*.json
+*.pem
+*.key
+.supabase/
+
+# Fixtures de alvará são PDFs reais (dado sensível) — não versionar
+supabase/tests/fixtures/*.pdf
