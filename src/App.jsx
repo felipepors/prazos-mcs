@@ -3276,6 +3276,7 @@ export default function App() {
       )}
 
       {/* ══ MODAL CLIENTES ══ */}
+      {kitModal && <ModalKitContratacao />}
       {clienteModal && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
           <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:480, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
