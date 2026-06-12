@@ -2544,10 +2544,10 @@ export default function App() {
     } catch(e) { toast("Erro: "+(e.message||e), "danger"); setKitStatus("idle"); }
   };
   const ModalKitContratacao = () => {
-    const [emailLocal, setEmailLocal] = React.useState(kitPrazo?.emailKit||"");
-    const [wppLocal, setWppLocal] = React.useState(kitPrazo?.wppKit||"");
-    const [dragOver, setDragOver] = React.useState(null);
-    const refs = React.useRef({});
+    const [emailLocal, setEmailLocal] = useState(kitPrazo?.emailKit||"");
+    const [wppLocal, setWppLocal] = useState(kitPrazo?.wppKit||"");
+    const [dragOver, setDragOver] = useState(null);
+    const refs = useRef({});
     if (!kitModal) return null;
     const ok = SLOTS_KIT.every(s => kitArqs[s.id]);
     return (
