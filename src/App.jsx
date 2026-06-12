@@ -2797,8 +2797,7 @@ export default function App() {
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
-                      <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id)
-                <button onClick={ev=>{ev.stopPropagation();setKitPrazo(p);setKitArqs({});setKitStatus("idle");setKitSignUrl("");setKitModal(true);}} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:12,border:"1px solid #F5C518",background:"transparent",color:"#F5C518",fontSize:11,fontWeight:600,cursor:"pointer"}}>Kit</button>; }}
+                      <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id); }}
                         title={p.orcamentoEnviado ? "Orçamento enviado — clique para desmarcar" : "Marcar orçamento como enviado"}
                         style={{
                           fontSize:10.5, fontWeight:700, cursor:"pointer", userSelect:"none",
@@ -2809,6 +2808,7 @@ export default function App() {
                         }}>
                         {p.orcamentoEnviado ? "✓ Orçamento enviado" : "＋ Orçamento enviado?"}
                       </span>
+                      <button onClick={ev=>{ev.stopPropagation();setKitPrazo(p);setKitArqs({});setKitStatus("idle");setKitSignUrl("");setKitModal(true);}} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:12,border:"1px solid #F5C518",background:"transparent",color:"#F5C518",fontSize:11,fontWeight:600,cursor:"pointer"}}>Kit</button>
                       <span style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
                         <span style={{ position:"relative", display:"inline-flex" }}>
                         <input type="date" value={p.dataEntrada || ""}
