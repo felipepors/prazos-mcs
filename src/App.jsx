@@ -2352,11 +2352,6 @@ export default function App() {
   const [clienteForm, setClienteForm]   = useState({ nome:"", tipo:"PJ", obs:"" });
   const [clienteEditId, setClienteEditId] = useState(null);
   const [backupModal, setBackupModal]   = useState(false);
-  const [kitModal,setKitModal]=useState(false);
-  const [kitPrazo,setKitPrazo]=useState(null);
-  const [kitArqs,setKitArqs]=useState({});
-  const [kitStatus,setKitStatus]=useState("idle");
-  const [kitSignUrl,setKitSignUrl]=useState("");
   const fileInputRef = useRef(null);
   const [novoFeriado, setNovoFeriado]   = useState({ data:"", nome:"" });
 
@@ -2520,6 +2515,92 @@ export default function App() {
     if (!cmdParsed) return;
     setForm({ ...cmdParsed, modoData:"final" });
     setModal("novo"); setCmdModal(false); setCmdTexto(""); setCmdParsed(null);
+  };
+
+  const SLOTS_KIT = [
+    { id:"procuracao", label:"Procuracao",                    hint:"Outorga de poderes" },
+    { id:"declaracao", label:"Declaracao de hipossuficiencia", hint:"AJG" },
+    { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
+  ];
+  const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
+  const enviarKit = async () => {
+    if (kitStatus !== "idle") return;
+    if (!SLOTS_KIT.every(s => kitArqs[s.id])) return;
+    if (!kitPrazo?.emailKit) { toast("Preencha o e-mail", "danger"); return; }
+    setKitStatus("sending");
+    try {
+      const sb = await initSupabase();
+      const [p,d,c] = await Promise.all([fileToB64(kitArqs["procuracao"]),fileToB64(kitArqs["declaracao"]),fileToB64(kitArqs["contrato"])]);
+      const {data,error} = await sb.functions.invoke("criar-kit-zapsign", {body:{nome:kitPrazo.parte,email:kitPrazo.emailKit,whatsapp:kitPrazo.wppKit||"",procuracao_b64:p,declaracao_b64:d,contrato_b64:c}});
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      setKitSignUrl(data.sign_url);
+      setKitStatus("done");
+    } catch(e) { toast("Erro: "+(e.message||e), "danger"); setKitStatus("idle"); }
+  };
+  const ModalKitContratacao = () => {
+    const [emailLocal, setEmailLocal] = React.useState(kitPrazo?.emailKit||"");
+    const [wppLocal, setWppLocal] = React.useState(kitPrazo?.wppKit||"");
+    const [dragOver, setDragOver] = React.useState(null);
+    const refs = React.useRef({});
+    if (!kitModal) return null;
+    const ok = SLOTS_KIT.every(s => kitArqs[s.id]);
+    return (
+      <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,background:"rgba(0,0,0,0.5)"}} onClick={()=>{if(kitStatus!=="sending"){setKitModal(false);setKitStatus("idle");setKitSignUrl("");}}}>
+        <div style={{background:T.card,borderRadius:16,padding:"20px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",border:"1px solid "+T.border}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratacao</h2>
+            {kitStatus!=="sending" && <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{background:"transparent",border:"none",padding:6,cursor:"pointer",color:T.textSoft,display:"flex"}}><Icon name="close" size={18} color={T.textSoft}/></button>}
+          </div>
+          {kitStatus==="done" ? (
+            <div style={{textAlign:"center",padding:"20px 0"}}>
+              <p style={{fontWeight:700,color:T.text,fontSize:32,marginBottom:4}}>&#x2713;</p>
+              <p style={{fontWeight:700,color:T.text,marginBottom:4}}>Link gerado!</p>
+              <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuracao + Declaracao + Contrato</p>
+              <div style={{background:T.cardAlt,borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left"}}>
+                <span style={{fontSize:12,color:"#3B82F6",fontFamily:"monospace",wordBreak:"break-all"}}>{kitSignUrl}</span>
+              </div>
+              <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+                <button onClick={()=>{navigator.clipboard.writeText(kitSignUrl);toast("Copiado!","success");}} style={{...BTN_PRIMARY,fontSize:13}}>Copiar link</button>
+                {wppLocal && <button onClick={()=>{const n=wppLocal.replace(/\D/g,"");window.open("https://wa.me/55"+n+"?text="+encodeURIComponent("Link para assinar:\n"+kitSignUrl),"_blank");}} style={{...BTN_PRIMARY,fontSize:13,background:"#16a34a",borderColor:"#16a34a"}}>WhatsApp</button>}
+                <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{...BTN_GHOST,fontSize:13}}>Fechar</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+                <label><span style={LBL}>Cliente</span><input value={kitPrazo?.parte||""} readOnly style={{...INP,background:T.cardAlt,color:T.textSoft}}/></label>
+                <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>{setEmailLocal(e.target.value);setKitPrazo(p=>({...p,emailKit:e.target.value}));}} placeholder="cliente@email.com" style={INP}/></label>
+                <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>{setWppLocal(e.target.value);setKitPrazo(p=>({...p,wppKit:e.target.value}));}} placeholder="51 9 9999-9999" style={INP}/></label>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+                {SLOTS_KIT.map((slot,i) => {
+                  const arq=kitArqs[slot.id]; const over=dragOver===slot.id;
+                  return (
+                    <div key={slot.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,cursor:arq?"default":"pointer",border:over?"1.5px solid #3B82F6":arq?"1.5px solid #16a34a":"1.5px dashed "+T.border,background:over?"#EFF6FF":arq?"#f0fdf4":T.cardAlt}}
+                      onDragOver={e=>{e.preventDefault();setDragOver(slot.id);}} onDragLeave={()=>setDragOver(null)}
+                      onDrop={e=>{e.preventDefault();setDragOver(null);const f=e.dataTransfer.files?.[0];if(f&&f.name.match(/\.pdf$/i))setKitArqs(p=>({...p,[slot.id]:f}));}}
+                      onClick={()=>!arq&&refs.current[slot.id]?.click()}>
+                      <input type="file" accept=".pdf" style={{display:"none"}} ref={el=>refs.current[slot.id]=el} onChange={e=>{const f=e.target.files?.[0];if(f)setKitArqs(p=>({...p,[slot.id]:f}));}}/>
+                      <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
+                        <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
+                      </div>
+                      {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>x</button>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <span style={{fontSize:12,color:T.textSoft}}>{ok&&emailLocal?"3 docs prontos":""+Object.keys(kitArqs).length+"/3 docs"}</span>
+                <button onClick={enviarKit} disabled={!ok||!emailLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -3189,93 +3270,6 @@ export default function App() {
       )}
 
       {/* ══ MODAL CLIENTES ══ */}
-        const SLOTS_KIT = [
-    { id:"procuracao", label:"Procuracao",                    hint:"Outorga de poderes" },
-    { id:"declaracao", label:"Declaracao de hipossuficiencia", hint:"AJG" },
-    { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
-  ];
-  const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
-  const enviarKit = async () => {
-    if (kitStatus !== "idle") return;
-    if (!SLOTS_KIT.every(s => kitArqs[s.id])) return;
-    if (!kitPrazo?.emailKit) { toast("Preencha o e-mail", "danger"); return; }
-    setKitStatus("sending");
-    try {
-      const sb = await initSupabase();
-      const [p,d,c] = await Promise.all([fileToB64(kitArqs["procuracao"]),fileToB64(kitArqs["declaracao"]),fileToB64(kitArqs["contrato"])]);
-      const {data,error} = await sb.functions.invoke("criar-kit-zapsign", {body:{nome:kitPrazo.parte,email:kitPrazo.emailKit,whatsapp:kitPrazo.wppKit||"",procuracao_b64:p,declaracao_b64:d,contrato_b64:c}});
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      setKitSignUrl(data.sign_url);
-      setKitStatus("done");
-    } catch(e) { toast("Erro: "+(e.message||e), "danger"); setKitStatus("idle"); }
-  };
-  const ModalKitContratacao = () => {
-    const [emailLocal, setEmailLocal] = React.useState(kitPrazo?.emailKit||"");
-    const [wppLocal, setWppLocal] = React.useState(kitPrazo?.wppKit||"");
-    const [dragOver, setDragOver] = React.useState(null);
-    const refs = React.useRef({});
-    if (!kitModal) return null;
-    const ok = SLOTS_KIT.every(s => kitArqs[s.id]);
-    return (
-      <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,background:"rgba(0,0,0,0.5)"}} onClick={()=>{if(kitStatus!=="sending"){setKitModal(false);setKitStatus("idle");setKitSignUrl("");}}}>
-        <div style={{background:T.card,borderRadius:16,padding:"20px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",border:"1px solid "+T.border}} onClick={e=>e.stopPropagation()}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratacao</h2>
-            {kitStatus!=="sending" && <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{background:"transparent",border:"none",padding:6,cursor:"pointer",color:T.textSoft,display:"flex"}}><Icon name="close" size={18} color={T.textSoft}/></button>}
-          </div>
-          {kitStatus==="done" ? (
-            <div style={{textAlign:"center",padding:"20px 0"}}>
-              <p style={{fontWeight:700,color:T.text,fontSize:32,marginBottom:4}}>&#x2713;</p>
-              <p style={{fontWeight:700,color:T.text,marginBottom:4}}>Link gerado!</p>
-              <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuracao + Declaracao + Contrato</p>
-              <div style={{background:T.cardAlt,borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left"}}>
-                <span style={{fontSize:12,color:"#3B82F6",fontFamily:"monospace",wordBreak:"break-all"}}>{kitSignUrl}</span>
-              </div>
-              <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-                <button onClick={()=>{navigator.clipboard.writeText(kitSignUrl);toast("Copiado!","success");}} style={{...BTN_PRIMARY,fontSize:13}}>Copiar link</button>
-                {wppLocal && <button onClick={()=>{const n=wppLocal.replace(/\D/g,"");window.open("https://wa.me/55"+n+"?text="+encodeURIComponent("Link para assinar:\n"+kitSignUrl),"_blank");}} style={{...BTN_PRIMARY,fontSize:13,background:"#16a34a",borderColor:"#16a34a"}}>WhatsApp</button>}
-                <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{...BTN_GHOST,fontSize:13}}>Fechar</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-                <label><span style={LBL}>Cliente</span><input value={kitPrazo?.parte||""} readOnly style={{...INP,background:T.cardAlt,color:T.textSoft}}/></label>
-                <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>{setEmailLocal(e.target.value);setKitPrazo(p=>({...p,emailKit:e.target.value}));}} placeholder="cliente@email.com" style={INP}/></label>
-                <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>{setWppLocal(e.target.value);setKitPrazo(p=>({...p,wppKit:e.target.value}));}} placeholder="51 9 9999-9999" style={INP}/></label>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-                {SLOTS_KIT.map((slot,i) => {
-                  const arq=kitArqs[slot.id]; const over=dragOver===slot.id;
-                  return (
-                    <div key={slot.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,cursor:arq?"default":"pointer",border:over?"1.5px solid #3B82F6":arq?"1.5px solid #16a34a":"1.5px dashed "+T.border,background:over?"#EFF6FF":arq?"#f0fdf4":T.cardAlt}}
-                      onDragOver={e=>{e.preventDefault();setDragOver(slot.id);}} onDragLeave={()=>setDragOver(null)}
-                      onDrop={e=>{e.preventDefault();setDragOver(null);const f=e.dataTransfer.files?.[0];if(f&&f.name.match(/\.pdf$/i))setKitArqs(p=>({...p,[slot.id]:f}));}}
-                      onClick={()=>!arq&&refs.current[slot.id]?.click()}>
-                      <input type="file" accept=".pdf" style={{display:"none"}} ref={el=>refs.current[slot.id]=el} onChange={e=>{const f=e.target.files?.[0];if(f)setKitArqs(p=>({...p,[slot.id]:f}));}}/>
-                      <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
-                        <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
-                      </div>
-                      {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>x</button>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:12,color:T.textSoft}}>{ok&&emailLocal?"3 docs prontos":""+Object.keys(kitArqs).length+"/3 docs"}</span>
-                <button onClick={enviarKit} disabled={!ok||!emailLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-
       {clienteModal && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
           <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:480, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
