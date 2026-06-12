@@ -2528,15 +2528,16 @@ export default function App() {
     { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
   ];
   const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
-  const enviarKit = async () => {
+  const enviarKit = async (nomeC, emailC, wppC) => {
     if (kitStatus !== "idle") return;
     if (!SLOTS_KIT.every(s => kitArqs[s.id])) return;
-    if (!kitPrazo?.emailKit) { toast("Preencha o e-mail", "danger"); return; }
+    if (!nomeC) { toast("Preencha o nome do cliente", "danger"); return; }
+    if (!emailC) { toast("Preencha o e-mail", "danger"); return; }
     setKitStatus("sending");
     try {
       const sb = await initSupabase();
       const [p,d,c] = await Promise.all([fileToB64(kitArqs["procuracao"]),fileToB64(kitArqs["declaracao"]),fileToB64(kitArqs["contrato"])]);
-      const {data,error} = await sb.functions.invoke("criar-kit-zapsign", {body:{nome:kitPrazo.parte,email:kitPrazo.emailKit,whatsapp:kitPrazo.wppKit||"",procuracao_b64:p,declaracao_b64:d,contrato_b64:c}});
+      const {data,error} = await sb.functions.invoke("criar-kit-zapsign", {body:{nome:nomeC,email:emailC,whatsapp:wppC||"",procuracao_b64:p,declaracao_b64:d,contrato_b64:c}});
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
       setKitSignUrl(data.sign_url);
@@ -2544,6 +2545,7 @@ export default function App() {
     } catch(e) { toast("Erro: "+(e.message||e), "danger"); setKitStatus("idle"); }
   };
   const ModalKitContratacao = () => {
+    const [nomeLocal, setNomeLocal] = useState(kitPrazo?.parte||"");
     const [emailLocal, setEmailLocal] = useState(kitPrazo?.emailKit||"");
     const [wppLocal, setWppLocal] = useState(kitPrazo?.wppKit||"");
     const [dragOver, setDragOver] = useState(null);
@@ -2574,9 +2576,9 @@ export default function App() {
           ) : (
             <>
               <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-                <label><span style={LBL}>Cliente</span><input value={kitPrazo?.parte||""} readOnly style={{...INP,background:T.cardAlt,color:T.textSoft}}/></label>
-                <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>{setEmailLocal(e.target.value);setKitPrazo(p=>({...p,emailKit:e.target.value}));}} placeholder="cliente@email.com" style={INP}/></label>
-                <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>{setWppLocal(e.target.value);setKitPrazo(p=>({...p,wppKit:e.target.value}));}} placeholder="51 9 9999-9999" style={INP}/></label>
+                <label><span style={LBL}>Cliente *</span><input value={nomeLocal} onChange={e=>setNomeLocal(e.target.value)} placeholder="Nome do cliente" style={INP}/></label>
+                <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>setEmailLocal(e.target.value)} placeholder="cliente@email.com" style={INP}/></label>
+                <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>setWppLocal(e.target.value)} placeholder="51 9 9999-9999" style={INP}/></label>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
                 {SLOTS_KIT.map((slot,i) => {
@@ -2599,7 +2601,7 @@ export default function App() {
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                 <span style={{fontSize:12,color:T.textSoft}}>{ok&&emailLocal?"3 docs prontos":""+Object.keys(kitArqs).length+"/3 docs"}</span>
-                <button onClick={enviarKit} disabled={!ok||!emailLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
+                <button onClick={()=>enviarKit(nomeLocal,emailLocal,wppLocal)} disabled={!ok||!emailLocal||!nomeLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
               </div>
             </>
           )}
@@ -2673,6 +2675,7 @@ export default function App() {
           { key:"tarefas",    label:"Tarefas",    ico:"check" },
           { key:"djen",       label:"DJEN",       ico:"flag" },
           { key:"alvaras",    label:"Alvarás",    ico:"mail" },
+          { key:"assinaturas", label:"Assinaturas", ico:"check" },
         ].map(({ key, label, ico }) => (
           <button key={key} onClick={() => setAba(key)}
             style={{
@@ -2813,7 +2816,6 @@ export default function App() {
                         }}>
                         {p.orcamentoEnviado ? "✓ Orçamento enviado" : "＋ Orçamento enviado?"}
                       </span>
-                      <button onClick={ev=>{ev.stopPropagation();setKitPrazo(p);setKitArqs({});setKitStatus("idle");setKitSignUrl("");setKitModal(true);}} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:12,border:"1px solid #F5C518",background:"transparent",color:"#F5C518",fontSize:11,fontWeight:600,cursor:"pointer"}}>Kit</button>
                       <span style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
                         <span style={{ position:"relative", display:"inline-flex" }}>
                         <input type="date" value={p.dataEntrada || ""}
@@ -2961,7 +2963,20 @@ export default function App() {
       {/* ══ ABA ALVARÁS ══ */}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
-      {aba !== "alvaras" && (
+      {aba === "assinaturas" && (
+        <div style={{ padding:"16px 16px 80px" }}>
+          <div style={{ marginBottom:14 }}>
+            <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text }}>Assinaturas</h2>
+            <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>Kit de contratacao via ZapSign: Procuracao + Declaracao + Contrato em 1 link</div>
+          </div>
+          <button onClick={() => { setKitPrazo({}); setKitArqs({}); setKitStatus("idle"); setKitSignUrl(""); setKitModal(true); }}
+            style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"12px 20px", borderRadius:12, border:"none", background:"#F5C518", color:"#1B2A4A", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px #F5C51855" }}>
+            + Gerar kit de contratacao
+          </button>
+        </div>
+      )}
+
+      {aba !== "alvaras" && aba !== "assinaturas" && (
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
