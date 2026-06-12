@@ -2538,7 +2538,7 @@ export default function App() {
       const sb = await initSupabase();
       const [p,d,c] = await Promise.all([fileToB64(kitArqs["procuracao"]),fileToB64(kitArqs["declaracao"]),fileToB64(kitArqs["contrato"])]);
       const {data,error} = await sb.functions.invoke("criar-kit-zapsign", {body:{nome:nomeC,email:emailC,whatsapp:wppC||"",procuracao_b64:p,declaracao_b64:d,contrato_b64:c}});
-      if (error) throw new Error(error.message);
+      if (error) { let m=error.message; try { const ctx=await error.context.json(); if(ctx?.error) m=ctx.error; } catch(_){} throw new Error(m); }
       if (data?.error) throw new Error(data.error);
       setKitSignUrl(data.sign_url);
       setKitStatus("done");
