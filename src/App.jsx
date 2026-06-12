@@ -2352,6 +2352,11 @@ export default function App() {
   const [clienteForm, setClienteForm]   = useState({ nome:"", tipo:"PJ", obs:"" });
   const [clienteEditId, setClienteEditId] = useState(null);
   const [backupModal, setBackupModal]   = useState(false);
+  const [kitModal,setKitModal]=useState(false);
+  const [kitPrazo,setKitPrazo]=useState(null);
+  const [kitArqs,setKitArqs]=useState({});
+  const [kitStatus,setKitStatus]=useState("idle");
+  const [kitSignUrl,setKitSignUrl]=useState("");
   const fileInputRef = useRef(null);
   const [novoFeriado, setNovoFeriado]   = useState({ data:"", nome:"" });
 
