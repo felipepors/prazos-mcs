@@ -1269,6 +1269,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
   const [formNovoProcesso, setFormNovoProcesso] = useState({ numero_processo:"", tribunal:"", observacao:"" });
   const [salvandoNovoProcesso, setSalvandoNovoProcesso] = useState(false);
   const [confirmApagar, setConfirmApagar] = useState(null); // { pub, vinculados }
+  const [confirmDuplasDjen, setConfirmDuplasDjen] = useState(null); // { existentes, form } — alerta de processo já cadastrado no DJEN
 
   // Prazos da aba Prazos que pertencem ao mesmo processo (casa por digitos, ignora mascara CNJ)
   const soDig = s => (s || "").replace(/\D/g, "");
@@ -1691,6 +1692,9 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
               <button disabled={!formNovoProcesso.numero_processo.trim() || salvandoNovoProcesso}
                 onClick={async () => {
                   if (!formNovoProcesso.numero_processo.trim()) return;
+                  const digNovo = formNovoProcesso.numero_processo.replace(/\D/g, "");
+                  const existentes = items.filter(i => soDig(i.numero_processo) === digNovo);
+                  if (existentes.length > 0) { setConfirmDuplasDjen({ existentes, form: formNovoProcesso }); return; }
                   setSalvandoNovoProcesso(true);
                   const result = await adicionarProcessoManual(formNovoProcesso);
                   setSalvandoNovoProcesso(false);
@@ -1699,6 +1703,48 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                 }}
                 style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer", opacity:(!formNovoProcesso.numero_processo.trim()||salvandoNovoProcesso)?0.5:1 }}>
                 {salvandoNovoProcesso ? "Salvando..." : "Adicionar e acompanhar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDuplasDjen && (
+        <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:300, padding:16, pointerEvents:"none" }}>
+          <div style={{ background:T.card, borderRadius:16, padding:22, maxWidth:400, width:"100%", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
+              <div style={{ background:"#fff8e1", borderRadius:"50%", padding:14, display:"flex" }}>
+                <Icon name="alert" size={28} color="#f5a623" />
+              </div>
+            </div>
+            <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:4, textAlign:"center" }}>Processo já cadastrado no DJEN</div>
+            <div style={{ fontSize:12, color:T.textMuted, marginBottom:12, textAlign:"center" }}>
+              Este número já aparece {confirmDuplasDjen.existentes.length === 1 ? "1 vez" : `${confirmDuplasDjen.existentes.length} vezes`} na aba DJEN:
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16, maxHeight:160, overflowY:"auto" }}>
+              {confirmDuplasDjen.existentes.map(e => (
+                <div key={e.id} style={{ background:T.bg, borderRadius:8, padding:"8px 12px", fontSize:12, border:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  <span style={{ fontWeight:700, color:T.text }}>{e.numero_processo || "—"}</span>
+                  {e.tribunal && <span style={{ color:T.textMuted }}>· {e.tribunal}</span>}
+                  {e.data_publicacao && <span style={{ color:T.textMuted }}>· {e.data_publicacao}</span>}
+                  {e.status && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:11, fontWeight:600, background: STATUS_DJEN[e.status]?.cor || T.primary, color:"#fff" }}>{e.status}</span>}
+                  {e.id_djen && e.id_djen.startsWith("manual_") && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10, fontWeight:700, background:"#4a90d9", color:"#fff" }}>MANUAL</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:12, color:T.textMuted, marginBottom:16, textAlign:"center" }}>Deseja incluir mesmo assim?</div>
+            <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+              <button onClick={() => setConfirmDuplasDjen(null)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 16px", color:T.textSoft, cursor:"pointer", fontSize:13 }}>Cancelar</button>
+              <button onClick={async () => {
+                const formSalvar = confirmDuplasDjen.form;
+                setConfirmDuplasDjen(null);
+                setSalvandoNovoProcesso(true);
+                const result = await adicionarProcessoManual(formSalvar);
+                setSalvandoNovoProcesso(false);
+                if (result.error) { toast("Erro ao salvar. Tente novamente.","danger"); }
+                else { setModalNovoProcesso(false); toast("Processo adicionado para acompanhamento","success"); }
+              }} style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                Incluir mesmo assim
               </button>
             </div>
           </div>
@@ -2336,6 +2382,7 @@ export default function App() {
   const [modal, setModal]               = useState(null);
   const [form, setForm]                 = useState({});
   const [confirmDel, setConfirmDel]     = useState(null);
+  const [confirmDuplasPrazo, setConfirmDuplasPrazo] = useState(null); // { existentes, form } — alerta de prazo duplicado
   const [resumoAberto, setResumoAberto] = useState(false);
   const [gerirTipos, setGerirTipos]     = useState(false);
   const [novoTipoInput, setNovoTipoInput] = useState("");
@@ -2421,15 +2468,22 @@ export default function App() {
     setModal("novo");
   };
   const openEdit = p => { setForm({...p}); setModal(p.id); };
+  const _salvarNovoForcado = (f) => {
+    setPrazos(prev => [...prev, {...f, id:Date.now()}]);
+    if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(() => {}); }
+    toast("Prazo criado","success");
+    setModal(null);
+    setConfirmDuplasPrazo(null);
+  };
   const salvar = () => {
     if (!form.processo || !form.dataLimite) return;
     if (modal === "novo") {
-      setPrazos(prev => [...prev, {...form, id:Date.now()}]);
-      if (form.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", form.djenId).then(() => {}); }
-      toast("Prazo criado","success");
+      const digNovo = (form.processo || "").replace(/\D/g, "");
+      const existentes = prazos.filter(p => (p.processo || "").replace(/\D/g, "") === digNovo);
+      if (existentes.length > 0) { setConfirmDuplasPrazo({ existentes, form }); return; }
+      _salvarNovoForcado(form);
     }
-    else { setPrazos(prev => prev.map(p => p.id === modal ? {...form, id:modal} : p)); toast("Prazo atualizado","success"); }
-    setModal(null);
+    else { setPrazos(prev => prev.map(p => p.id === modal ? {...form, id:modal} : p)); toast("Prazo atualizado","success"); setModal(null); }
   };
 
   const toggleConcluidoComRecorrencia = id => {
@@ -3660,6 +3714,40 @@ export default function App() {
       )}
 
       {/* ══ CONFIRMAR EXCLUSÃO ══ */}
+      {confirmDuplasPrazo && (
+        <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
+          <div style={{ background:T.card, borderRadius:16, padding:22, maxWidth:420, width:"100%", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
+              <div style={{ background:"#fff8e1", borderRadius:"50%", padding:14, display:"flex" }}>
+                <Icon name="alert" size={28} color="#f5a623" />
+              </div>
+            </div>
+            <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:4, textAlign:"center" }}>Processo já em Prazos</div>
+            <div style={{ fontSize:12, color:T.textMuted, marginBottom:12, textAlign:"center" }}>
+              Este número já possui {confirmDuplasPrazo.existentes.length === 1 ? "1 prazo" : `${confirmDuplasPrazo.existentes.length} prazos`} cadastrado{confirmDuplasPrazo.existentes.length !== 1 ? "s" : ""}:
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16, maxHeight:180, overflowY:"auto" }}>
+              {confirmDuplasPrazo.existentes.map(p => (
+                <div key={p.id} style={{ background:T.bg, borderRadius:8, padding:"8px 12px", fontSize:12, border:`1px solid ${T.border}`, display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+                  <span style={{ fontWeight:700, color:T.text }}>{p.processo || "—"}</span>
+                  {p.parte && <span style={{ color:T.textMuted }}>· {p.parte}</span>}
+                  {p.tipo && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:11, fontWeight:600, background:T.primarySoft||"#e8ecf4", color:T.primary }}>{p.tipo}</span>}
+                  {p.dataLimite && <span style={{ color:T.textMuted }}>· vence {new Date(p.dataLimite + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
+                  {p.concluido && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10, background:"#d4edda", color:"#155724", fontWeight:700 }}>Concluído</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:12, color:T.textMuted, marginBottom:16, textAlign:"center" }}>Deseja incluir mesmo assim?</div>
+            <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+              <button onClick={() => setConfirmDuplasPrazo(null)} style={BTN_GHOST}>Cancelar</button>
+              <button onClick={() => _salvarNovoForcado(confirmDuplasPrazo.form)} style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"10px 18px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                Incluir mesmo assim
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDel && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
           <div style={{ background:T.card, borderRadius:16, padding:22, maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
