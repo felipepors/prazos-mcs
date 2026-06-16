@@ -1000,7 +1000,7 @@ function TelaLogin({ T, modo, onToast }) {
           <div style={{ background:T.primary, width:60, height:60, borderRadius:"50%", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:12 }}>
             <img src="/icon-512.png" alt="MCS" style={{ width:54, height:54, borderRadius:"50%", objectFit:"cover" }} />
           </div>
-          <h1 style={{ margin:0, fontSize:20, fontWeight:700, color:T.text }}>Controle de Prazos</h1>
+          <h1 style={{ margin:0, fontSize:20, fontWeight:700, color:T.text }}>Sistema Martins, Corrêa da Silva Advogados</h1>
           <div style={{ fontSize:12, color:T.textMuted, marginTop:4 }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:36, display:"block", margin:"4px auto 0", filter: modo==="dark" ? "brightness(0) invert(1)" : "none" }} /></div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -2688,7 +2688,7 @@ export default function App() {
           <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
             <img src="/icon-512.png" alt="MCS" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
             <div style={{ minWidth:0 }}>
-              <h1 style={{ fontSize:16, fontWeight:700, margin:0, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Controle de Prazos</h1>
+              <h1 style={{ fontSize:16, fontWeight:700, margin:0, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Sistema Martins, Corrêa da Silva Advogados</h1>
               <div style={{ fontSize:10, color:"#bee3f8cc", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:28, display:"block", marginTop:0, filter:"brightness(0) invert(1)", opacity:0.9 }} /></div>
             </div>
           </div>
