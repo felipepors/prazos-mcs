@@ -55,7 +55,11 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Usuario nao autenticado" }, 401);
 
-    const { alvara_id } = await req.json().catch(() => ({}));
+    const reqBody = await req.json().catch(() => ({}));
+    const alvara_id = reqBody.alvara_id;
+    // Texto editado pelo Felipe na tela de revisão (opcional).
+    const corpoCustom = typeof reqBody.corpo === "string" ? reqBody.corpo : "";
+    const assuntoCustom = typeof reqBody.assunto === "string" ? reqBody.assunto : "";
     if (!alvara_id) return json({ error: "Informe alvara_id" }, 400);
 
     // Lê o alvará (RLS garante que é do próprio usuário).
@@ -92,8 +96,11 @@ Deno.serve(async (req) => {
       `Atenciosamente,`,
       `Martins, Correa da Silva Advogados`,
     ];
-    const corpo = linhas.join("\n");
-    const assunto = `Aviso de alvara expedido - processo ${alvara.processo || alvara.numero_alvara || ""}`.trim();
+    // Usa o texto editado (se veio do dashboard); senão, o automático.
+    const corpo = corpoCustom.trim() ? corpoCustom : linhas.join("\n");
+    const assunto = assuntoCustom.trim()
+      ? assuntoCustom
+      : `Aviso de alvara expedido - processo ${alvara.processo || alvara.numero_alvara || ""}`.trim();
 
     // Suporte a múltiplos destinatários: email_destino pode conter e-mails
     // separados por vírgula ou ponto-e-vírgula (ex.: "a@x.com, b@x.com").
