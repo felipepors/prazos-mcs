@@ -2057,6 +2057,16 @@ function PainelAlvaras({ T, toast, user }) {
   const [verPrestadores, setVerPrestadores] = useState(false);
   const [arrastando, setArrastando] = useState(false);
   const fileRef = useRef(null);
+  // Assunto e corpo do e-mail ficam editáveis antes do envio.
+  const [assuntoEdit, setAssuntoEdit] = useState("");
+  const [corpoEdit, setCorpoEdit] = useState("");
+  useEffect(() => {
+    if (detalhe) {
+      setAssuntoEdit(`Aviso de alvará expedido - processo ${detalhe.processo || detalhe.numero_alvara || ""}`.trim());
+      setCorpoEdit(corpoEmailAlvara(detalhe));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detalhe?.id]);
 
   const onDrop = (e) => {
     e.preventDefault();
@@ -2124,7 +2134,7 @@ function PainelAlvaras({ T, toast, user }) {
     setEnviando(true);
     try {
       const sb = await initSupabase();
-      const { data, error } = await sb.functions.invoke("enviar-alvara", { body: { alvara_id: detalhe.id } });
+      const { data, error } = await sb.functions.invoke("enviar-alvara", { body: { alvara_id: detalhe.id, corpo: corpoEdit, assunto: assuntoEdit } });
       if (error) throw new Error(await msgErroFn(error));
       if (data?.error) throw new Error(data.error);
       toast("E-mail enviado ao prestador", "success");
@@ -2276,11 +2286,18 @@ function PainelAlvaras({ T, toast, user }) {
                 ))}
 
                 <div style={{ marginTop:6 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:0.4 }}>
-                    Prévia do e-mail {a.email_destino ? `→ ${a.email_destino}` : ""}
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:"uppercase", letterSpacing:0.4 }}>
+                      E-mail {a.email_destino ? `→ ${a.email_destino}` : ""}
+                    </span>
+                    <span style={{ fontSize:10, color:T.textMuted, fontStyle:"italic" }}>editável antes de enviar</span>
                   </div>
-                  <pre style={{ margin:0, background:T.cardAlt, borderRadius:10, padding:"12px 14px", fontSize:12,
-                    color:T.text, whiteSpace:"pre-wrap", fontFamily:"inherit", border:`1px solid ${T.border}` }}>{corpoEmailAlvara(a)}</pre>
+                  <input type="text" value={assuntoEdit} onChange={e => setAssuntoEdit(e.target.value)} placeholder="Assunto do e-mail"
+                    style={{ width:"100%", boxSizing:"border-box", background:T.card, border:`1px solid ${T.border}`, borderRadius:9,
+                      padding:"9px 11px", fontSize:12, fontWeight:600, color:T.text, marginBottom:8 }} />
+                  <textarea value={corpoEdit} onChange={e => setCorpoEdit(e.target.value)} rows={12} spellCheck={true}
+                    style={{ width:"100%", boxSizing:"border-box", background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10,
+                      padding:"12px 14px", fontSize:12, color:T.text, fontFamily:"inherit", lineHeight:1.5, resize:"vertical" }} />
                 </div>
 
                 {semEmail && !enviado && (
