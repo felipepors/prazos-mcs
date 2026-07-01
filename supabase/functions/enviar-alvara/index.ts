@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
       await client.send({
         from: REMETENTE,
         to: destinatarios,
+        bcc: ["contato@correadasilvamartins.com.br"],
         subject: assunto,
         content: corpo,
       });
