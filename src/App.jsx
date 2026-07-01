@@ -43,7 +43,10 @@ function _normKey(k) { return k.replace(/^mcs\./, ""); }
 function _broadcast(key) { _estadoSubs.forEach(fn => { try { fn(key); } catch(e) {} }); }
 
 async function _flush() {
-  if (!_userId || !_sb) return;
+  // Guarda crítica: nunca gravar na nuvem antes de hidratar do servidor.
+  // Sem isso, um dispositivo novo (localStorage vazio → dados de exemplo)
+  // podia sobrescrever os dados reais no Supabase nos primeiros segundos.
+  if (!_userId || !_sb || !_estadoCarregado) return;
   try {
     const payload = { user_id: _userId, dados: _estado };
     const { error } = await _sb.from("estado_usuario").upsert(payload, { onConflict: "user_id" });
@@ -461,10 +464,11 @@ function gerarICS(prazo) {
     "BEGIN:VALARM","TRIGGER:-P1D","ACTION:DISPLAY","DESCRIPTION:Prazo amanhã!","END:VALARM",
     "END:VEVENT","END:VCALENDAR"
   ].join("\r\n");
-  const url = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
+  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url; a.download = `prazo-${prazo.parte.replace(/\s+/g,"-")}.ics`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 function whatsappPrazo(prazo) {
@@ -576,11 +580,12 @@ function gerarBackup(dados) {
     dados,
   };
   const json = JSON.stringify(blob, null, 2);
-  const url = "data:application/json;charset=utf-8," + encodeURIComponent(json);
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `mcs-backup-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 function restaurarBackup(file, callback) {
@@ -611,12 +616,20 @@ function mascararProcesso(v) {
 function proximaDataRecorrencia(dataAtual, recorrencia) {
   if (!recorrencia || recorrencia === "none") return null;
   const d = new Date(dataAtual + "T00:00:00");
+  // addMeses com clamp: 31/jan + 1 mês = 28/fev (setMonth puro pularia p/ 03/mar)
+  const addMeses = (n) => {
+    const dia = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + n);
+    const max = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(dia, max));
+  };
   if (recorrencia === "semanal")    d.setDate(d.getDate() + 7);
   if (recorrencia === "quinzenal")  d.setDate(d.getDate() + 14);
-  if (recorrencia === "mensal")     d.setMonth(d.getMonth() + 1);
-  if (recorrencia === "bimestral")  d.setMonth(d.getMonth() + 2);
-  if (recorrencia === "trimestral") d.setMonth(d.getMonth() + 3);
-  if (recorrencia === "anual")      d.setFullYear(d.getFullYear() + 1);
+  if (recorrencia === "mensal")     addMeses(1);
+  if (recorrencia === "bimestral")  addMeses(2);
+  if (recorrencia === "trimestral") addMeses(3);
+  if (recorrencia === "anual")      addMeses(12);
   return isoLocal(d);
 }
 
@@ -630,6 +643,28 @@ const INITIAL = [
 
 const FERIADOS_2026 = ["2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-11","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25"];
 const FERIADOS_NOMES = {"2026-01-01":"Ano Novo","2026-02-16":"Carnaval","2026-02-17":"Carnaval","2026-04-03":"Sexta-feira Santa","2026-04-21":"Tiradentes","2026-05-01":"Dia do Trabalho","2026-06-11":"Corpus Christi","2026-09-07":"Independência","2026-10-12":"Nossa Senhora Aparecida","2026-11-02":"Finados","2026-11-15":"Proclamação da República","2026-11-20":"Consciência Negra","2026-12-25":"Natal"};
+
+// Feriados nacionais 2027 + recesso forense (CPC art. 220: prazos suspensos
+// de 20/12 a 20/01 — cada dia é tratado como não-útil na contagem).
+// ATENÇÃO: feriados estaduais/municipais (ex.: 20/09 RS, 09/07 SP) NÃO entram
+// no seed — o conjunto é global e marcá-los alongaria indevidamente prazos de
+// OUTROS tribunais. Adicionar manualmente pelo modal Feriados, se necessário.
+const FERIADOS_2027 = ["2027-01-01","2027-02-08","2027-02-09","2027-03-26","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"];
+const FERIADOS_NOMES_2027 = {"2027-01-01":"Ano Novo","2027-02-08":"Carnaval","2027-02-09":"Carnaval","2027-03-26":"Sexta-feira Santa","2027-04-21":"Tiradentes","2027-05-01":"Dia do Trabalho","2027-05-27":"Corpus Christi","2027-09-07":"Independência","2027-10-12":"Nossa Senhora Aparecida","2027-11-02":"Finados","2027-11-15":"Proclamação da República","2027-11-20":"Consciência Negra","2027-12-25":"Natal"};
+function _diasRecesso(anoInicio) {
+  const out = [];
+  const d = new Date(anoInicio, 11, 20);
+  const fim = new Date(anoInicio + 1, 0, 20);
+  while (d <= fim) { out.push(isoLocal(d)); d.setDate(d.getDate() + 1); }
+  return out;
+}
+const RECESSO_2026_27 = _diasRecesso(2026);
+const FERIADOS_SEED = [...new Set([...FERIADOS_2026, ...FERIADOS_2027, ...RECESSO_2026_27])].sort();
+const FERIADOS_NOMES_SEED = (() => {
+  const n = { ...FERIADOS_NOMES, ...FERIADOS_NOMES_2027 };
+  RECESSO_2026_27.forEach(d => { if (!n[d]) n[d] = "Recesso forense (CPC 220)"; });
+  return n;
+})();
 
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENTES UI
@@ -1138,8 +1173,7 @@ function usePublicacoesDjen() {
     const patch = { status: novoStatus };
     if (observacao !== undefined) patch.observacao = observacao;
     const { error } = await sb.from("publicacoes_djen").update(patch).eq("id", id);
-    if (error) console.error("Erro atualizando status:", error);
-    // optimistic update — realtime confirma depois
+    if (error) { console.error("Erro atualizando status:", error); notifySyncError("Falha ao salvar o status no servidor"); return; }
     setItems(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
   };
 
@@ -1147,7 +1181,7 @@ function usePublicacoesDjen() {
     const sb = _sb;
     if (!sb) return;
     const { error } = await sb.from("publicacoes_djen").update({ acompanhar: valor }).eq("id", id);
-    if (error) console.error("Erro atualizando acompanhar:", error);
+    if (error) { console.error("Erro atualizando acompanhar:", error); notifySyncError("Falha ao salvar no servidor"); return; }
     setItems(prev => prev.map(p => p.id === id ? { ...p, acompanhar: valor } : p));
   };
 
@@ -1165,7 +1199,7 @@ function usePublicacoesDjen() {
     const sb = _sb;
     if (!sb) return;
     const { error } = await sb.from("publicacoes_djen").delete().eq("id", id);
-    if (error) console.error("Erro removendo:", error);
+    if (error) { console.error("Erro removendo:", error); notifySyncError("Falha ao apagar no servidor"); return; }
     setItems(prev => prev.filter(p => p.id !== id));
   };
 
@@ -1285,6 +1319,16 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
     setSalvandoObs(false);
   }, [detalhe?.id]);
 
+  // Mantém o modal de detalhe em sincronia com a lista: sem isto, clicar num
+  // botão do Workflow ou no checkbox "Acompanhar" atualizava o banco mas o
+  // modal continuava mostrando o valor antigo até fechar/reabrir. Também
+  // reflete atualizações vindas do realtime enquanto o modal está aberto.
+  useEffect(() => {
+    if (!detalhe) return;
+    const atual = items.find(i => i.id === detalhe.id);
+    if (atual && atual !== detalhe) setDetalhe(atual);
+  }, [items, detalhe?.id]);
+
   // Navegação cruzada Prazos→DJEN: ao chegar com um processo-alvo, busca por ele
   // e limpa os filtros para garantir que o card apareça. Depois zera o alvo no App
   // (permite clicar de novo no mesmo processo).
@@ -1319,9 +1363,11 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
       if (filtroPrio && String(i.prioridade) !== filtroPrio) return false;
       if (busca) {
         const b = busca.toLowerCase();
+        const bd = busca.replace(/\D/g, "");
+        const matchDigitos = bd.length >= 4 && soDig(i.numero_processo).includes(bd);
         const hay = [i.numero_processo, i.medicamentos, i.gatilhos, i.observacao, i.tribunal, i.texto_publicacao]
           .filter(Boolean).join(" ").toLowerCase();
-        if (!hay.includes(b)) return false;
+        if (!matchDigitos && !hay.includes(b)) return false;
       }
       return true;
     });
@@ -2349,20 +2395,90 @@ function PainelAlvaras({ T, toast, user }) {
   );
 }
 
+const SLOTS_KIT = [
+  { id:"procuracao", label:"Procuracao",                    hint:"Outorga de poderes" },
+  { id:"declaracao", label:"Declaracao de hipossuficiencia", hint:"AJG" },
+  { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
+];
+const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
+
+// Modal do kit de contratação — definido FORA do App de propósito. Quando era
+// definido inline, cada re-render do App criava um tipo de componente novo e o
+// React remontava o modal, apagando nome/e-mail/WhatsApp já digitados (ex.: ao
+// anexar um PDF, que altera kitArqs no estado do App, ou ao aparecer um toast).
+function KitContratacaoModal({ T, INP, LBL, BTN_PRIMARY, BTN_GHOST, kitPrazo, kitArqs, setKitArqs, kitStatus, kitSignUrl, enviarKit, toast, onFechar }) {
+  const [nomeLocal, setNomeLocal] = useState(kitPrazo?.parte||"");
+  const [emailLocal, setEmailLocal] = useState(kitPrazo?.emailKit||"");
+  const [wppLocal, setWppLocal] = useState(kitPrazo?.wppKit||"");
+  const [dragOver, setDragOver] = useState(null);
+  const refs = useRef({});
+  const ok = SLOTS_KIT.every(s => kitArqs[s.id]);
+  return (
+    <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,background:"rgba(0,0,0,0.5)"}} onClick={()=>{if(kitStatus!=="sending"){onFechar();}}}>
+      <div style={{background:T.card,borderRadius:16,padding:"20px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",border:"1px solid "+T.border}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratacao</h2>
+          {kitStatus!=="sending" && <button onClick={onFechar} style={{background:"transparent",border:"none",padding:6,cursor:"pointer",color:T.textSoft,display:"flex"}}><Icon name="close" size={18} color={T.textSoft}/></button>}
+        </div>
+        {kitStatus==="done" ? (
+          <div style={{textAlign:"center",padding:"20px 0"}}>
+            <p style={{fontWeight:700,color:T.text,fontSize:32,marginBottom:4}}>&#x2713;</p>
+            <p style={{fontWeight:700,color:T.text,marginBottom:4}}>Link gerado!</p>
+            <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuracao + Declaracao + Contrato</p>
+            <div style={{background:T.cardAlt,borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left"}}>
+              <span style={{fontSize:12,color:"#3B82F6",fontFamily:"monospace",wordBreak:"break-all"}}>{kitSignUrl}</span>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+              <button onClick={()=>{navigator.clipboard.writeText(kitSignUrl);toast("Copiado!","success");}} style={{...BTN_PRIMARY,fontSize:13}}>Copiar link</button>
+              {wppLocal && <button onClick={()=>{const n=wppLocal.replace(/\D/g,"");window.open("https://wa.me/55"+n+"?text="+encodeURIComponent("Link para assinar:\n"+kitSignUrl),"_blank");}} style={{...BTN_PRIMARY,fontSize:13,background:"#16a34a",borderColor:"#16a34a"}}>WhatsApp</button>}
+              <button onClick={onFechar} style={{...BTN_GHOST,fontSize:13}}>Fechar</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+              <label><span style={LBL}>Cliente *</span><input value={nomeLocal} onChange={e=>setNomeLocal(e.target.value)} placeholder="Nome do cliente" style={INP}/></label>
+              <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>setEmailLocal(e.target.value)} placeholder="cliente@email.com" style={INP}/></label>
+              <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>setWppLocal(e.target.value)} placeholder="51 9 9999-9999" style={INP}/></label>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+              {SLOTS_KIT.map((slot,i) => {
+                const arq=kitArqs[slot.id]; const over=dragOver===slot.id;
+                return (
+                  <div key={slot.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,cursor:arq?"default":"pointer",border:over?"1.5px solid #3B82F6":arq?"1.5px solid #16a34a":"1.5px dashed "+T.border,background:over?"#EFF6FF":arq?"#f0fdf4":T.cardAlt}}
+                    onDragOver={e=>{e.preventDefault();setDragOver(slot.id);}} onDragLeave={()=>setDragOver(null)}
+                    onDrop={e=>{e.preventDefault();setDragOver(null);const f=e.dataTransfer.files?.[0];if(f&&f.name.match(/\.pdf$/i))setKitArqs(p=>({...p,[slot.id]:f}));}}
+                    onClick={()=>!arq&&refs.current[slot.id]?.click()}>
+                    <input type="file" accept=".pdf" style={{display:"none"}} ref={el=>refs.current[slot.id]=el} onChange={e=>{const f=e.target.files?.[0];if(f)setKitArqs(p=>({...p,[slot.id]:f}));}}/>
+                    <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
+                      <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
+                    </div>
+                    {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>x</button>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <span style={{fontSize:12,color:T.textSoft}}>{ok&&emailLocal?"3 docs prontos":""+Object.keys(kitArqs).length+"/3 docs"}</span>
+              <button onClick={()=>enviarKit(nomeLocal,emailLocal,wppLocal)} disabled={!ok||!emailLocal||!nomeLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // Tema
   const [modo, setModo] = useStorage("mcs.modo", "light");
   const T = TEMA[modo];
 
-  // Auth (só ativa quando Firebase configurado)
+  // Auth (só ativa quando Supabase configurado)
   const { user, loading: authLoading, ativo: authAtivo } = useAuth();
-  const _carregandoAuth = authAtivo && authLoading; if (false) {
-    return (
-      <div style={{ minHeight:"100vh", background:TEMA[modo].bg, display:"flex", alignItems:"center", justifyContent:"center", color:TEMA[modo].textMuted, fontFamily:"Inter,system-ui,sans-serif" }}>
-        Carregando...
-      </div>
-    );
-  }
+  const _carregandoAuth = authAtivo && authLoading;
   const _precisaLogin = authAtivo && !user;
 
   // Estados de dados (com persistência)
@@ -2373,8 +2489,8 @@ export default function App() {
     { id:2, titulo:"Atualizar blog — Oncotype DX", descricao:"Publicar artigo novo", prioridade:"media", concluida:false, responsavel:"Janine", prazoLimite:"" },
     { id:3, titulo:"Enviar proposta cliente novo", descricao:"", prioridade:"baixa", concluida:false, responsavel:"Felipe", prazoLimite:"" },
   ]);
-  const [feriados, setFeriados]         = useStorage("mcs.feriados", FERIADOS_2026);
-  const [feriadosNomes, setFeriadosNomes] = useStorage("mcs.feriadosNomes", FERIADOS_NOMES);
+  const [feriados, setFeriados]         = useStorage("mcs.feriados", FERIADOS_SEED);
+  const [feriadosNomes, setFeriadosNomes] = useStorage("mcs.feriadosNomes", FERIADOS_NOMES_SEED);
   const [clientes, setClientes]         = useStorage("mcs.clientes", [
     { id:1, nome:"Unimed POARS",   tipo:"PJ", obs:"Cooperativa de saúde" },
     { id:2, nome:"IPE Saúde",      tipo:"PJ", obs:"Autarquia estadual" },
@@ -2385,7 +2501,6 @@ export default function App() {
   // Estados UI
   const [filtro, setFiltro]             = useState("todos");
   const [busca, setBusca]               = useState("");
-  const [buscaPrazos, setBuscaPrazos]   = useState(""); // navegação cruzada DJEN→Prazos
   const [processoAlvoDjen, setProcessoAlvoDjen] = useState(""); // navegação cruzada Prazos→DJEN
   const [ordenacao, setOrdenacao]       = useState("data_asc");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
@@ -2431,11 +2546,26 @@ export default function App() {
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2500);
   };
-  _onSyncError = toast;
+  useEffect(() => { _onSyncError = toast; return () => { _onSyncError = null; }; }, []);
 
   const shown = useRef(false);
   useEffect(() => { if (!shown.current) { shown.current = true; setResumoAberto(true); } }, []);
   useEffect(() => { setFeriadosGlobal(feriados); }, [feriados]);
+
+  // Semeia feriados novos (2027 + recesso forense) em contas que já tinham
+  // dados salvos — o seed inicial só vale para instalações novas. Efeito
+  // idempotente: converge quando nada falta. (Efeito colateral aceito:
+  // excluir um feriado do seed pelo modal o readiciona.)
+  useEffect(() => {
+    const faltantes = FERIADOS_SEED.filter(d => !feriados.includes(d));
+    if (faltantes.length === 0) return;
+    setFeriados(prev => [...new Set([...prev, ...FERIADOS_SEED])].sort());
+    setFeriadosNomes(prev => {
+      const n = { ...prev };
+      FERIADOS_SEED.forEach(d => { if (!n[d]) n[d] = FERIADOS_NOMES_SEED[d]; });
+      return n;
+    });
+  }, [feriados]);
 
   const hoje = isoLocal();
   const todosOsTipos = [...TIPOS_DEFAULT, ...tiposCustom].sort((a,b) => a.localeCompare(b,"pt"));
@@ -2459,7 +2589,12 @@ export default function App() {
         if (filtro !== "todos" && p.status !== filtro) return false;
         if (filtroPrioridade !== "todas" && (p.prioridade||"media") !== filtroPrioridade) return false;
         if (filtroResp !== "todos" && p.responsavel !== filtroResp) return false;
-        if (busca) { const b = busca.toLowerCase(); return p.processo.includes(b) || p.parte.toLowerCase().includes(b) || p.tipo.toLowerCase().includes(b); }
+        if (busca) {
+          const b = busca.toLowerCase();
+          const bd = busca.replace(/\D/g, "");
+          const matchDigitos = bd.length >= 4 && (p.processo || "").replace(/\D/g, "").includes(bd);
+          return matchDigitos || (p.processo || "").includes(b) || p.parte.toLowerCase().includes(b) || p.tipo.toLowerCase().includes(b);
+        }
         return true;
       })
       .sort((a,b) => {
@@ -2521,11 +2656,6 @@ export default function App() {
     toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
   };
   const deletar = id => { setPrazos(prev => prev.filter(p => p.id !== id)); setConfirmDel(null); toast("Prazo excluído","danger"); };
-  const toggleConcluido = id => {
-    setPrazos(prev => prev.map(p => p.id === id ? {...p, concluido:!p.concluido} : p));
-    const p = prazos.find(x => x.id === id);
-    toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
-  };
   const toggleOrcamento = id => {
     const p = prazos.find(x => x.id === id);
     setPrazos(prev => prev.map(x => x.id === id ? {...x, orcamentoEnviado: !x.orcamentoEnviado} : x));
@@ -2593,12 +2723,6 @@ export default function App() {
     setModal("novo"); setCmdModal(false); setCmdTexto(""); setCmdParsed(null);
   };
 
-  const SLOTS_KIT = [
-    { id:"procuracao", label:"Procuracao",                    hint:"Outorga de poderes" },
-    { id:"declaracao", label:"Declaracao de hipossuficiencia", hint:"AJG" },
-    { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
-  ];
-  const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
   const enviarKit = async (nomeC, emailC, wppC) => {
     if (kitStatus !== "idle") return;
     if (!SLOTS_KIT.every(s => kitArqs[s.id])) return;
@@ -2615,72 +2739,6 @@ export default function App() {
       setKitStatus("done");
     } catch(e) { toast("Erro: "+(e.message||e), "danger"); setKitStatus("idle"); }
   };
-  const ModalKitContratacao = () => {
-    const [nomeLocal, setNomeLocal] = useState(kitPrazo?.parte||"");
-    const [emailLocal, setEmailLocal] = useState(kitPrazo?.emailKit||"");
-    const [wppLocal, setWppLocal] = useState(kitPrazo?.wppKit||"");
-    const [dragOver, setDragOver] = useState(null);
-    const refs = useRef({});
-    if (!kitModal) return null;
-    const ok = SLOTS_KIT.every(s => kitArqs[s.id]);
-    return (
-      <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,background:"rgba(0,0,0,0.5)"}} onClick={()=>{if(kitStatus!=="sending"){setKitModal(false);setKitStatus("idle");setKitSignUrl("");}}}>
-        <div style={{background:T.card,borderRadius:16,padding:"20px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",border:"1px solid "+T.border}} onClick={e=>e.stopPropagation()}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratacao</h2>
-            {kitStatus!=="sending" && <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{background:"transparent",border:"none",padding:6,cursor:"pointer",color:T.textSoft,display:"flex"}}><Icon name="close" size={18} color={T.textSoft}/></button>}
-          </div>
-          {kitStatus==="done" ? (
-            <div style={{textAlign:"center",padding:"20px 0"}}>
-              <p style={{fontWeight:700,color:T.text,fontSize:32,marginBottom:4}}>&#x2713;</p>
-              <p style={{fontWeight:700,color:T.text,marginBottom:4}}>Link gerado!</p>
-              <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuracao + Declaracao + Contrato</p>
-              <div style={{background:T.cardAlt,borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left"}}>
-                <span style={{fontSize:12,color:"#3B82F6",fontFamily:"monospace",wordBreak:"break-all"}}>{kitSignUrl}</span>
-              </div>
-              <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-                <button onClick={()=>{navigator.clipboard.writeText(kitSignUrl);toast("Copiado!","success");}} style={{...BTN_PRIMARY,fontSize:13}}>Copiar link</button>
-                {wppLocal && <button onClick={()=>{const n=wppLocal.replace(/\D/g,"");window.open("https://wa.me/55"+n+"?text="+encodeURIComponent("Link para assinar:\n"+kitSignUrl),"_blank");}} style={{...BTN_PRIMARY,fontSize:13,background:"#16a34a",borderColor:"#16a34a"}}>WhatsApp</button>}
-                <button onClick={()=>{setKitModal(false);setKitStatus("idle");setKitSignUrl("");}} style={{...BTN_GHOST,fontSize:13}}>Fechar</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-                <label><span style={LBL}>Cliente *</span><input value={nomeLocal} onChange={e=>setNomeLocal(e.target.value)} placeholder="Nome do cliente" style={INP}/></label>
-                <label><span style={LBL}>E-mail *</span><input value={emailLocal} onChange={e=>setEmailLocal(e.target.value)} placeholder="cliente@email.com" style={INP}/></label>
-                <label><span style={LBL}>WhatsApp (opcional)</span><input value={wppLocal} onChange={e=>setWppLocal(e.target.value)} placeholder="51 9 9999-9999" style={INP}/></label>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-                {SLOTS_KIT.map((slot,i) => {
-                  const arq=kitArqs[slot.id]; const over=dragOver===slot.id;
-                  return (
-                    <div key={slot.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,cursor:arq?"default":"pointer",border:over?"1.5px solid #3B82F6":arq?"1.5px solid #16a34a":"1.5px dashed "+T.border,background:over?"#EFF6FF":arq?"#f0fdf4":T.cardAlt}}
-                      onDragOver={e=>{e.preventDefault();setDragOver(slot.id);}} onDragLeave={()=>setDragOver(null)}
-                      onDrop={e=>{e.preventDefault();setDragOver(null);const f=e.dataTransfer.files?.[0];if(f&&f.name.match(/\.pdf$/i))setKitArqs(p=>({...p,[slot.id]:f}));}}
-                      onClick={()=>!arq&&refs.current[slot.id]?.click()}>
-                      <input type="file" accept=".pdf" style={{display:"none"}} ref={el=>refs.current[slot.id]=el} onChange={e=>{const f=e.target.files?.[0];if(f)setKitArqs(p=>({...p,[slot.id]:f}));}}/>
-                      <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
-                        <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
-                      </div>
-                      {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>x</button>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:12,color:T.textSoft}}>{ok&&emailLocal?"3 docs prontos":""+Object.keys(kitArqs).length+"/3 docs"}</span>
-                <button onClick={()=>enviarKit(nomeLocal,emailLocal,wppLocal)} disabled={!ok||!emailLocal||!nomeLocal||kitStatus==="sending"} style={{...BTN_PRIMARY,opacity:(!ok||!emailLocal)?0.4:1,fontSize:13}}>{kitStatus==="sending"?"Enviando...":"Enviar kit"}</button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     _carregandoAuth ? <div style={{minHeight:"100vh",background:TEMA[modo].bg,display:"flex",alignItems:"center",justifyContent:"center",color:TEMA[modo].textMuted,fontFamily:"Inter,system-ui,sans-serif"}}>Carregando...</div> : _precisaLogin ? <TelaLogin T={T} modo={modo} onToast={()=>{}} /> : <div style={{ fontFamily:"Inter,system-ui,-apple-system,sans-serif", minHeight:"100vh", background:T.bg, color:T.text, paddingBottom:80 }}>
       <style>{`
@@ -2693,6 +2751,12 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
         input, select, textarea { font-family: inherit; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
+        @media print {
+          body * { visibility: hidden !important; }
+          .print-area, .print-area * { visibility: visible !important; overflow: visible !important; max-height: none !important; }
+          .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; box-shadow: none !important; border: none !important; }
+          .no-print { display: none !important; }
+        }
       `}</style>
 
       {/* ── HEADER COMPACTO ── */}
@@ -3028,7 +3092,7 @@ export default function App() {
         <PainelDJEN T={T} modo={modo} setPrazos={setPrazos} prazos={prazos} setAba={setAba}
                     setForm={setForm} setModal={setModal} toast={toast}
                     processoAlvo={processoAlvoDjen} onProcessoAlvoConsumido={() => setProcessoAlvoDjen("")}
-                    irParaPrazo={(numProcesso) => { setBuscaPrazos(numProcesso); setBusca(numProcesso); setAba("lista"); }} />
+                    irParaPrazo={(numProcesso) => { setBusca(numProcesso); setAba("lista"); }} />
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
@@ -3316,13 +3380,13 @@ export default function App() {
       {/* ══ MODAL EXPORTAR ══ */}
       {exportModal && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:12, pointerEvents:"none" }}>
-          <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:760, maxHeight:"92vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
+          <div className="print-area" style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:760, maxHeight:"92vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
             <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:6 }}>
               <div>
                 <div style={{ fontSize:16, fontWeight:700, color:T.primary }}>Relatório</div>
                 <div style={{ fontSize:11, color:T.textMuted, marginTop:1 }}>{exportModal.hoje} · {exportModal.rows.length} prazo(s)</div>
               </div>
-              <div style={{ display:"flex", gap:6 }}>
+              <div className="no-print" style={{ display:"flex", gap:6 }}>
                 <button onClick={() => window.print()} style={{ ...BTN_PRIMARY, padding:"8px 14px", fontSize:13 }}>
                   <Icon name="printer" size={14} color="#fff" /> Imprimir / PDF
                 </button>
@@ -3362,7 +3426,10 @@ export default function App() {
       )}
 
       {/* ══ MODAL CLIENTES ══ */}
-      {kitModal && <ModalKitContratacao />}
+      {kitModal && <KitContratacaoModal T={T} INP={INP} LBL={LBL} BTN_PRIMARY={BTN_PRIMARY} BTN_GHOST={BTN_GHOST}
+        kitPrazo={kitPrazo} kitArqs={kitArqs} setKitArqs={setKitArqs} kitStatus={kitStatus} kitSignUrl={kitSignUrl}
+        enviarKit={enviarKit} toast={toast}
+        onFechar={() => { setKitModal(false); setKitStatus("idle"); setKitSignUrl(""); }} />}
       {clienteModal && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
           <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:480, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
@@ -3587,7 +3654,7 @@ export default function App() {
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                       <label>
-                        <span style={LBL}>Data início</span>
+                        <span style={LBL}>1º dia da contagem</span>
                         <input type="date" value={form.dataInicio||""} onChange={e => {
                           const di = e.target.value;
                           const du = parseInt(form.diasUteis||0);
@@ -3604,6 +3671,9 @@ export default function App() {
                           setForm(f => ({ ...f, diasUteis:e.target.value, dataLimite:dl }));
                         }} placeholder="15" style={INP} />
                       </label>
+                    </div>
+                    <div style={{ fontSize:10.5, color:T.textMuted, lineHeight:1.45 }}>
+                      ⚠ O dia informado <strong>conta como o 1º dia útil</strong>. Pelo CPC art. 224, informe o 1º dia útil <em>seguinte</em> à publicação/intimação — não o dia dela.
                     </div>
                     {form.dataLimite && (
                       <div style={{ background:T.primarySoft, borderRadius:8, padding:"8px 12px", display:"flex", alignItems:"center", gap:8 }}>
