@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Torre Neon</title>
+</head>
+<body>
+<style>
+  :root {
+    --night: #0d0b1e;
+    --dusk: #221a4e;
+    --ember: #ff3d8b;
+    --ice: #39e6ff;
+    --milk: #eae6ff;
+    --gold: #ffc53d;
+    --display: "Bahnschrift", "Avenir Next Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--night);
+    color: var(--milk);
+    font-family: var(--display);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+  }
+  #game {
+    position: fixed;
+    inset: 0;
+    display: block;
+    cursor: pointer;
+  }
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .5s ease;
+  }
+  #hud.on { opacity: 1; }
+  #score {
+    position: absolute;
+    top: max(3vh, 18px);
+    left: 0; right: 0;
+    text-align: center;
+    font-size: clamp(56px, 11vw, 92px);
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--milk);
+    text-shadow: 0 0 24px rgba(57, 230, 255, .35), 0 2px 0 rgba(13, 11, 30, .8);
+  }
+  #best {
+    position: absolute;
+    top: max(3vh, 18px);
+    right: 18px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .18em;
+    color: rgba(234, 230, 255, .65);
+  }
+  #best b {
+    display: block;
+    font-size: 22px;
+    letter-spacing: .04em;
+    color: var(--gold);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  #combo {
+    position: absolute;
+    top: calc(max(3vh, 18px) + clamp(64px, 12vw, 100px));
+    left: 50%;
+    transform: translateX(-50%) scale(.6);
+    padding: 6px 18px;
+    border-radius: 999px;
+    background: rgba(255, 61, 139, .16);
+    border: 1px solid rgba(255, 61, 139, .55);
+    color: var(--ember);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: .22em;
+    opacity: 0;
+    transition: opacity .25s ease, transform .25s ease;
+    text-shadow: 0 0 14px rgba(255, 61, 139, .6);
+  }
+  #combo.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #combo.pop { animation: pop .3s ease; }
+  @keyframes pop {
+    0% { transform: translateX(-50%) scale(1); }
+    45% { transform: translateX(-50%) scale(1.22); }
+    100% { transform: translateX(-50%) scale(1); }
+  }
+  #mute {
+    position: fixed;
+    top: max(3vh, 18px);
+    left: 16px;
+    z-index: 30;
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    border: 1px solid rgba(234, 230, 255, .25);
+    background: rgba(34, 26, 78, .55);
+    color: var(--milk);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #mute:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 24px;
+    background: rgba(13, 11, 30, .55);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    transition: opacity .45s ease, visibility .45s;
+  }
+  .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  h1 {
+    margin: 0;
+    font-size: clamp(52px, 13vw, 110px);
+    font-weight: 700;
+    line-height: .95;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: linear-gradient(100deg, var(--ice) 10%, var(--milk) 45%, var(--ember) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-wrap: balance;
+    filter: drop-shadow(0 0 26px rgba(57, 230, 255, .35));
+  }
+  .tagline {
+    margin: 0;
+    max-width: 34ch;
+    font-size: 16px;
+    line-height: 1.5;
+    color: rgba(234, 230, 255, .8);
+  }
+  .hint {
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--ice);
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: .45; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hint { animation: none; }
+    #combo.pop { animation: none; }
+  }
+  #over h2 {
+    margin: 0;
+    font-size: clamp(34px, 8vw, 58px);
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--milk);
+  }
+  #finalScore {
+    font-size: clamp(72px, 18vw, 140px);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ice);
+    text-shadow: 0 0 34px rgba(57, 230, 255, .45);
+  }
+  #record {
+    display: none;
+    padding: 5px 16px;
+    border-radius: 999px;
+    background: rgba(255, 197, 61, .15);
+    border: 1px solid rgba(255, 197, 61, .6);
+    color: var(--gold);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .25em;
+    text-transform: uppercase;
+  }
+  #record.show { display: inline-block; }
+  #finalBest { font-size: 15px; letter-spacing: .18em; color: rgba(234, 230, 255, .6); }
+  #again {
+    margin-top: 10px;
+    padding: 14px 42px;
+    border: none;
+    border-radius: 999px;
+    background: var(--ember);
+    color: #fff;
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0 28px rgba(255, 61, 139, .45);
+    transition: transform .12s ease;
+  }
+  #again:active { transform: scale(.94); }
+  #again:focus-visible { outline: 2px solid var(--ice); outline-offset: 3px; }
+</style>
+
+<canvas id="game" aria-label="Torre Neon — jogo de empilhar blocos"></canvas>
+
+<div id="hud">
+  <div id="score">0</div>
+  <div id="best">RECORDE<b id="bestVal">0</b></div>
+  <div id="combo">COMBO ×2</div>
+</div>
+
+<button id="mute" aria-label="Ativar ou desativar som">🔊</button>
+
+<div class="overlay" id="menu">
+  <h1>Torre Neon</h1>
+  <p class="tagline">Empilhe os blocos o mais alto que conseguir. Encaixe perfeito vale combo — e devolve o tamanho do bloco.</p>
+  <div class="hint">Toque ou espaço para soltar</div>
+</div>
+
+<div class="overlay hidden" id="over">
+  <h2>Fim de jogo</h2>
+  <div id="finalScore">0</div>
+  <span id="record">Novo recorde</span>
+  <div id="finalBest">RECORDE 0</div>
+  <button id="again">Jogar de novo</button>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- setup ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestValEl = document.getElementById('bestVal');
+  const comboEl = document.getElementById('combo');
+  const hudEl = document.getElementById('hud');
+  const menuEl = document.getElementById('menu');
+  const overEl = document.getElementById('over');
+  const finalScoreEl = document.getElementById('finalScore');
+  const finalBestEl = document.getElementById('finalBest');
+  const recordEl = document.getElementById('record');
+  const againBtn = document.getElementById('again');
+  const muteBtn = document.getElementById('mute');
+
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ISO_X = Math.cos(Math.PI / 6);   // 0.866
+  const ISO_Y = 0.5;
+  const BLOCK_H = 36;                     // altura de cada camada (unidades de mundo)
+  const START_SIZE = 240;
+  const PERFECT_TOL = 8;                  // margem para contar como encaixe perfeito
+  const AMP = 300;                        // amplitude da oscilação do bloco em movimento
+  const GRAVITY = 1500;
+
+  let W = 0, H = 0, dpr = 1;
+  let stars = [];
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    stars = [];
+    const n = Math.floor((W * H) / 12000);
+    for (let i = 0; i < n; i++) {
+      stars.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.4 + .4,
+        ph: Math.random() * Math.PI * 2,
+        spd: .5 + Math.random() * 1.5,
+      });
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- estado ----------
+  let state = 'menu';           // menu | play | over
+  let stack = [];               // {cx, cz, w, d, hue} — y = índice * BLOCK_H
+  let moving = null;            // {axis, t, speed, w, d, hue}
+  let shards = [];              // pedaços cortados caindo
+  let particles = [];
+  let rings = [];
+  let floaters = [];
+  let score = 0, combo = 0;
+  let best = +(localStorage.getItem('torreNeonBest') || 0);
+  let hueBase = Math.random() * 360;
+  let cameraY = BLOCK_H, cameraYT = BLOCK_H;
+  let scale = 1, scaleT = 1;
+  let shakeMag = 0, shakeX = 0, shakeY = 0;
+  let flash = 0;
+  let overAt = 0;
+  let time = 0;
+
+  bestValEl.textContent = best;
+
+  function hueAt(i) { return (hueBase + i * 7) % 360; }
+
+  function resetGame() {
+    stack = [{ cx: 0, cz: 0, w: START_SIZE, d: START_SIZE, hue: hueAt(0) }];
+    shards = []; particles = []; rings = []; floaters = [];
+    score = 0; combo = 0;
+    hueBase = Math.random() * 360;
+    stack[0].hue = hueAt(0);
+    cameraY = cameraYT = BLOCK_H;
+    scale = scaleT = 1;
+    shakeMag = 0; flash = 0;
+    scoreEl.textContent = '0';
+    comboEl.classList.remove('show');
+    spawnMoving();
+  }
+
+  function spawnMoving() {
+    const level = stack.length;
+    const last = stack[stack.length - 1];
+    moving = {
+      axis: level % 2 ? 'x' : 'z',
+      t: -Math.PI / 2,
+      speed: Math.min(3.4, 1.7 + level * 0.045),
+      w: last.w,
+      d: last.d,
+      hue: hueAt(level),
+    };
+    cameraYT = level * BLOCK_H;
+  }
+
+  function movingCenter() {
+    const last = stack[stack.length - 1];
+    const off = Math.sin(moving.t) * AMP;
+    return moving.axis === 'x'
+      ? { cx: last.cx + off, cz: last.cz }
+      : { cx: last.cx, cz: last.cz + off };
+  }
+
+  // ---------- som ----------
+  let audio = null;
+  let muted = localStorage.getItem('torreNeonMuted') === '1';
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+
+  function tone(freq, dur = .12, type = 'sine', vol = .2, delay = 0) {
+    if (muted) return;
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+      const t0 = audio.currentTime + delay;
+      const osc = audio.createOscillator();
+      const g = audio.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+      osc.connect(g).connect(audio.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + .02);
+    } catch (e) { /* sem áudio disponível */ }
+  }
+
+  muteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    muted = !muted;
+    localStorage.setItem('torreNeonMuted', muted ? '1' : '0');
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.blur();
+  });
+
+  // ---------- projeção ----------
+  function anchor() { return { ax: W / 2, ay: H * .62 }; }
+
+  function worldToScreen(x, y, z) {
+    const { ax, ay } = anchor();
+    return [
+      ax + (x - z) * ISO_X * scale + shakeX,
+      ay + ((x + z) * ISO_Y - (y - cameraY)) * scale + shakeY,
+    ];
+  }
+
+  // Desenha um paralelepípedo centrado em (px, py) na tela.
+  function drawBox(px, py, w, d, h, hue, rot = 0, alpha = 1, light = 0) {
+    const x0 = -w / 2, x1 = w / 2, z0 = -d / 2, z1 = d / 2, y0 = -h / 2, y1 = h / 2;
+    const P = (x, y, z) => {
+      let rx = (x - z) * ISO_X * scale;
+      let ry = ((x + z) * ISO_Y - y) * scale;
+      if (rot) {
+        const c = Math.cos(rot), s = Math.sin(rot);
+        const nx = rx * c - ry * s, ny = rx * s + ry * c;
+        rx = nx; ry = ny;
+      }
+      return [px + rx, py + ry];
+    };
+    const face = (pts, fill) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    ctx.globalAlpha = alpha;
+    const L = light * 8;
+    // lado direito (x = x1)
+    face([P(x1, y1, z0), P(x1, y1, z1), P(x1, y0, z1), P(x1, y0, z0)],
+      `hsl(${hue}, 62%, ${46 + L}%)`);
+    // lado esquerdo (z = z1)
+    face([P(x1, y1, z1), P(x0, y1, z1), P(x0, y0, z1), P(x1, y0, z1)],
+      `hsl(${hue}, 58%, ${35 + L}%)`);
+    // topo
+    const top = [P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), P(x0, y1, z1)];
+    face(top, `hsl(${hue}, 68%, ${63 + L}%)`);
+    // contorno neon do topo
+    ctx.beginPath();
+    ctx.moveTo(top[0][0], top[0][1]);
+    for (let i = 1; i < 4; i++) ctx.lineTo(top[i][0], top[i][1]);
+    ctx.closePath();
+    ctx.strokeStyle = `hsla(${hue}, 95%, 78%, ${.65 * alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- efeitos ----------
+  function burst(px, py, hue, count, spread = 3.2) {
+    if (REDUCED) count = Math.ceil(count / 3);
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 40 + Math.random() * 160 * spread / 3.2;
+      particles.push({
+        x: px, y: py,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v - 60,
+        life: .6 + Math.random() * .5,
+        age: 0,
+        r: 1.5 + Math.random() * 2.5,
+        hue,
+      });
+    }
+  }
+
+  function addFloater(text, px, py, color) {
+    floaters.push({ text, x: px, y: py, age: 0, life: 1, color });
+  }
+
+  function shake(m) { if (!REDUCED) shakeMag = Math.max(shakeMag, m); }
+
+  // ---------- jogada ----------
+  function drop() {
+    const last = stack[stack.length - 1];
+    const m = moving;
+    const { cx, cz } = movingCenter();
+    const axis = m.axis;
+    const mC = axis === 'x' ? cx : cz;
+    const lC = axis === 'x' ? last.cx : last.cz;
+    const size = axis === 'x' ? m.w : m.d;
+    const delta = mC - lC;
+    const overlap = size - Math.abs(delta);
+    const level = stack.length;
+    const topY = level * BLOCK_H + BLOCK_H / 2;
+
+    if (overlap <= 0) {
+      // errou tudo — o bloco inteiro cai
+      shards.push({
+        cx, cz, w: m.w, d: m.d,
+        y: topY, vy: 0,
+        vx: Math.sign(delta || 1) * 60, axis,
+        rot: 0, vr: Math.sign(delta || 1) * 2.2,
+        hue: m.hue, alpha: 1,
+      });
+      gameOver();
+      return;
+    }
+
+    let nb;
+    if (Math.abs(delta) <= PERFECT_TOL) {
+      // encaixe perfeito
+      combo++;
+      nb = { cx: last.cx, cz: last.cz, w: m.w, d: m.d, hue: m.hue };
+      // a cada 3 perfeitos seguidos o bloco cresce de volta
+      if (combo % 3 === 0) {
+        nb.w = Math.min(START_SIZE, nb.w + 16);
+        nb.d = Math.min(START_SIZE, nb.d + 16);
+      }
+      const bonus = 1 + Math.min(combo, 5);
+      score += bonus;
+      const [px, py] = worldToScreen(nb.cx, (level + 1) * BLOCK_H, nb.cz);
+      rings.push({ cx: nb.cx, cz: nb.cz, y: (level + 1) * BLOCK_H, size: Math.max(nb.w, nb.d), age: 0, hue: m.hue });
+      burst(px, py, m.hue, 26);
+      addFloater(`PERFEITO! +${bonus}`, px, py - 30, 'var(--gold)');
+      flash = Math.min(1, .5 + combo * .1);
+      tone(500 + Math.min(combo, 8) * 55, .1, 'sine', .22);
+      tone(750 + Math.min(combo, 8) * 80, .16, 'sine', .18, .06);
+      if (combo >= 2) {
+        comboEl.textContent = `COMBO ×${combo}`;
+        comboEl.classList.add('show');
+        comboEl.classList.remove('pop');
+        void comboEl.offsetWidth;
+        comboEl.classList.add('pop');
+      }
+    } else {
+      // corta o pedaço que ficou de fora
+      combo = 0;
+      comboEl.classList.remove('show');
+      const lo = Math.max(mC - size / 2, lC - size / 2);
+      const hi = Math.min(mC + size / 2, lC + size / 2);
+      const keptC = (lo + hi) / 2;
+      const cutW = Math.abs(delta);
+      const cutC = delta > 0 ? hi + cutW / 2 : lo - cutW / 2;
+      if (axis === 'x') {
+        nb = { cx: keptC, cz: last.cz, w: overlap, d: m.d, hue: m.hue };
+        shards.push({ cx: cutC, cz: last.cz, w: cutW, d: m.d, y: topY, vy: 0, vx: Math.sign(delta) * 50, axis, rot: 0, vr: Math.sign(delta) * 2.5, hue: m.hue, alpha: 1 });
+      } else {
+        nb = { cx: last.cx, cz: keptC, w: m.w, d: overlap, hue: m.hue };
+        shards.push({ cx: last.cx, cz: cutC, w: m.w, d: cutW, y: topY, vy: 0, vx: Math.sign(delta) * 50, axis, rot: 0, vr: Math.sign(delta) * 2.5, hue: m.hue, alpha: 1 });
+      }
+      score += 1;
+      const [px, py] = worldToScreen(nb.cx, topY, nb.cz);
+      burst(px, py, m.hue, 10, 2);
+      shake(5);
+      tone(150, .1, 'square', .12);
+      tone(90, .14, 'triangle', .14, .02);
+    }
+
+    stack.push(nb);
+    scoreEl.textContent = score;
+    spawnMoving();
+  }
+
+  function gameOver() {
+    state = 'over';
+    overAt = performance.now();
+    moving = null;
+    shake(12);
+    flash = .6;
+    tone(320, .18, 'sawtooth', .14);
+    tone(210, .22, 'sawtooth', .12, .12);
+    tone(120, .4, 'sawtooth', .12, .26);
+    const totalH = stack.length * BLOCK_H;
+    scaleT = Math.max(.14, Math.min(1, (H * .58) / (totalH + 320)));
+    cameraYT = totalH * .52;
+    const isRecord = score > best;
+    if (isRecord) {
+      best = score;
+      localStorage.setItem('torreNeonBest', best);
+      bestValEl.textContent = best;
+    }
+    finalScoreEl.textContent = score;
+    finalBestEl.textContent = `RECORDE ${best}`;
+    recordEl.classList.toggle('show', isRecord);
+    setTimeout(() => overEl.classList.remove('hidden'), 550);
+  }
+
+  function startGame() {
+    resetGame();
+    state = 'play';
+    menuEl.classList.add('hidden');
+    overEl.classList.add('hidden');
+    hudEl.classList.add('on');
+    tone(440, .08, 'sine', .15);
+  }
+
+  // ---------- entrada ----------
+  function action() {
+    if (state === 'menu') startGame();
+    else if (state === 'play') drop();
+    else if (state === 'over' && performance.now() - overAt > 700) startGame();
+  }
+
+  window.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    action();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      action();
+    }
+  });
+  againBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state === 'over') startGame();
+  });
+
+  // ---------- desenho ----------
+  function drawBackground(dt) {
+    const topHue = hueAt(stack.length);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0d0b1e');
+    g.addColorStop(.55, '#161233');
+    g.addColorStop(1, `hsl(${topHue}, 45%, 14%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // estrelas com paralaxe conforme a torre sobe
+    const drift = cameraY * .12 * scale;
+    ctx.fillStyle = '#eae6ff';
+    for (const s of stars) {
+      const y = (s.y + drift) % (H + 4);
+      const tw = REDUCED ? .5 : .3 + .45 * (1 + Math.sin(time * s.spd + s.ph)) / 2;
+      ctx.globalAlpha = tw;
+      ctx.beginPath();
+      ctx.arc(s.x, y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // brilho ambiente atrás do topo da torre
+    const { ax, ay } = anchor();
+    const rg = ctx.createRadialGradient(ax, ay, 10, ax, ay, Math.min(W, H) * .55);
+    rg.addColorStop(0, `hsla(${topHue}, 80%, 60%, .14)`);
+    rg.addColorStop(1, 'hsla(0, 0%, 0%, 0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawStack() {
+    const from = Math.max(0, stack.length - Math.ceil(H / (BLOCK_H * scale)) - 4);
+    for (let i = from; i < stack.length; i++) {
+      const b = stack[i];
+      const yC = i * BLOCK_H + BLOCK_H / 2;
+      const [px, py] = worldToScreen(b.cx, yC, b.cz);
+      drawBox(px, py, b.w, b.d, BLOCK_H, b.hue);
+    }
+  }
+
+  function drawMoving() {
+    if (!moving) return;
+    const { cx, cz } = movingCenter();
+    const yC = stack.length * BLOCK_H + BLOCK_H / 2;
+    const [px, py] = worldToScreen(cx, yC, cz);
+    drawBox(px, py, moving.w, moving.d, BLOCK_H, moving.hue, 0, 1, 1);
+  }
+
+  function drawShards(dt) {
+    for (const s of shards) {
+      s.vy += GRAVITY * dt;
+      s.y -= s.vy * dt;
+      if (s.axis === 'x') s.cx += s.vx * dt; else s.cz += s.vx * dt;
+      s.rot += s.vr * dt;
+      if (s.y < cameraY - H) s.alpha = 0;
+      const [px, py] = worldToScreen(s.cx, s.y, s.cz);
+      if (py > -100 && py < H + 200 && s.alpha > 0) {
+        drawBox(px, py, s.w, s.d, BLOCK_H, s.hue, s.rot, s.alpha);
+      }
+    }
+    shards = shards.filter(s => s.alpha > 0 && s.y > cameraY - H * 2);
+  }
+
+  function drawRings(dt) {
+    for (const r of rings) {
+      r.age += dt;
+      const k = r.age / .55;
+      if (k >= 1) continue;
+      const s = r.size * (1 + k * 1.4);
+      const [px, py] = worldToScreen(r.cx, r.y, r.cz);
+      // losango isométrico expandindo
+      const P = (x, z) => [px + (x - z) * ISO_X * scale, py + (x + z) * ISO_Y * scale];
+      const a = P(-s / 2, -s / 2), b = P(s / 2, -s / 2), c = P(s / 2, s / 2), d = P(-s / 2, s / 2);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
+      ctx.closePath();
+      ctx.strokeStyle = `hsla(${r.hue}, 95%, 75%, ${(1 - k) * .9})`;
+      ctx.lineWidth = 2.5 * (1 - k) + .5;
+      ctx.stroke();
+    }
+    rings = rings.filter(r => r.age < .55);
+  }
+
+  function drawParticles(dt) {
+    for (const p of particles) {
+      p.age += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 220 * dt;
+      const k = 1 - p.age / p.life;
+      if (k <= 0) continue;
+      ctx.globalAlpha = k;
+      ctx.fillStyle = `hsl(${p.hue}, 90%, 72%)`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    particles = particles.filter(p => p.age < p.life);
+  }
+
+  function drawFloaters(dt) {
+    ctx.textAlign = 'center';
+    ctx.font = '700 21px ' + getComputedStyle(document.body).fontFamily;
+    for (const f of floaters) {
+      f.age += dt;
+      const k = 1 - f.age / f.life;
+      if (k <= 0) continue;
+      ctx.globalAlpha = Math.min(1, k * 2);
+      ctx.fillStyle = '#ffc53d';
+      ctx.fillText(f.text, f.x, f.y - (1 - k) * 46);
+    }
+    ctx.globalAlpha = 1;
+    floaters = floaters.filter(f => f.age < f.life);
+  }
+
+  // ---------- loop ----------
+  let lastT = performance.now();
+  function frame(now) {
+    const dt = Math.min(.05, (now - lastT) / 1000);
+    lastT = now;
+    time += dt;
+
+    if (moving && state !== 'over') moving.t += moving.speed * dt;
+    cameraY += (cameraYT - cameraY) * Math.min(1, dt * 4.5);
+    scale += (scaleT - scale) * Math.min(1, dt * 3);
+    shakeMag *= Math.pow(.001, dt);
+    if (shakeMag < .15) shakeMag = 0;
+    shakeX = (Math.random() * 2 - 1) * shakeMag;
+    shakeY = (Math.random() * 2 - 1) * shakeMag;
+    flash *= Math.pow(.004, dt);
+
+    drawBackground(dt);
+    drawStack();
+    drawShards(dt);
+    if (state !== 'over') drawMoving();
+    drawRings(dt);
+    drawParticles(dt);
+    drawFloaters(dt);
+
+    if (flash > .01) {
+      ctx.fillStyle = `rgba(234, 230, 255, ${flash * .18})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  resetGame();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
