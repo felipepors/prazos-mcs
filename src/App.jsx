@@ -2107,6 +2107,7 @@ const INTIM_URG = {
 };
 const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
 
+const corTribunal=(s)=>{const t=String(s||'');if(!t)return{c:'#4B5563',bg:'#EDF0F4'};let h=0;for(let i=0;i<t.length;i++)h=(h*37+t.charCodeAt(i))%360;return{c:'hsl('+h+',58%,30%)',bg:'hsl('+h+',68%,93%)'};};
 function intimDataBR(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || "");
@@ -2270,7 +2271,7 @@ function PainelIntimacoes({ T, user }) {
                 }}>
                 <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{i.numero_processo}</span>
-                  {i.tribunal && <Badge color={T.textMuted} bg={T.bg || "#EDF0F4"}>{i.tribunal}</Badge>}
+                  {i.tribunal && <Badge color={corTribunal(i.tribunal).c} bg={corTribunal(i.tribunal).bg}>{i.tribunal}</Badge>}
                   <Badge color={urg.c} bg={urg.bg}>{i.rotulo || i.classificacao}</Badge>
                   {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
                   {i.status !== "NOVO" && <Badge color={T.textMuted} bg={T.card}>{INTIM_STATUS_LABEL[i.status] || i.status}</Badge>}
@@ -2299,7 +2300,7 @@ function PainelIntimacoes({ T, user }) {
                 style={{ border: "none", background: "transparent", color: T.textMuted, fontSize: 20, cursor: "pointer" }}>×</button>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-              {detalhe.tribunal && <Badge color={T.textMuted} bg={T.bg || "#EDF0F4"}>{detalhe.tribunal}</Badge>}
+              {detalhe.tribunal && <Badge color={corTribunal(detalhe.tribunal).c} bg={corTribunal(detalhe.tribunal).bg}>{detalhe.tribunal}</Badge>}
               <Badge color={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).c} bg={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).bg}>
                 {detalhe.rotulo || detalhe.classificacao}
               </Badge>
