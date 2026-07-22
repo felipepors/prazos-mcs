@@ -2094,6 +2094,235 @@ function ModalPrestadores({ T, toast, user, onClose }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// INTIMAÇÕES (OAB) — Etapa 1: leitura, lista e filtros (v21)
+// Fonte: tabela intimacoes_oab, alimentada pela Edge Function buscar-intimacoes
+// (cron 9h seg–sex). Esta aba NÃO insere nem exclui — inserção é exclusiva
+// da coleta. Separada da aba DJEN por decisão de arquitetura.
+// ═══════════════════════════════════════════════════════════════════════════
+const INTIM_URG = {
+  alta:  { c:"#B00020", bg:"#FDECEA" },
+  media: { c:"#7A5B00", bg:"#FFF3CD" },
+  baixa: { c:"#4B5563", bg:"#EDF0F4" },
+};
+const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
+
+function intimDataBR(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || "");
+}
+
+function useIntimacoes(userId) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [ultimaColeta, setUltimaColeta] = useState(null);
+  const carregar = async () => {
+    setLoading(true);
+    const sb = await initSupabase();
+    if (!sb || !userId) { setLoading(false); return; }
+    const { data, error } = await sb
+      .from("intimacoes_oab")
+      .select("id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,texto")
+      .order("data_disponibilizacao", { ascending: false })
+      .limit(200);
+    if (!error) setItems(data || []);
+    const { data: ex } = await sb
+      .from("execucoes_coleta")
+      .select("iniciada_em,finalizada_em,novas_inseridas,sucesso,erro,origem")
+      .order("iniciada_em", { ascending: false })
+      .limit(1);
+    setUltimaColeta(ex && ex[0] ? ex[0] : null);
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  return { items, loading, ultimaColeta, carregar };
+}
+
+function PainelIntimacoes({ T, user }) {
+  const { items, loading, ultimaColeta, carregar } = useIntimacoes(user?.id);
+  const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
+  const [fTrib, setFTrib] = useState("");
+  const [fUrg, setFUrg] = useState("");
+  const [soConferir, setSoConferir] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [detalhe, setDetalhe] = useState(null);
+
+  const tribunais = useMemo(
+    () => [...new Set(items.map((i) => i.tribunal).filter(Boolean))].sort(),
+    [items],
+  );
+
+  const filtradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const qDig = q.replace(/\D/g, "");
+    return items.filter((i) => {
+      if (fStatus.size && !fStatus.has(i.status)) return false;
+      if (fTrib && i.tribunal !== fTrib) return false;
+      if (fUrg && i.urgencia !== fUrg) return false;
+      if (soConferir && !i.requer_conferencia) return false;
+      if (q) {
+        const alvoTxt = `${i.partes || ""} ${i.trecho || ""} ${i.rotulo || ""}`.toLowerCase();
+        const bateDig = qDig.length >= 4 && String(i.numero_processo_digitos || "").includes(qDig);
+        if (!bateDig && !alvoTxt.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, fStatus, fTrib, fUrg, soConferir, busca]);
+
+  const porDia = useMemo(() => {
+    const g = new Map();
+    for (const i of filtradas) {
+      const d = i.data_disponibilizacao || "—";
+      if (!g.has(d)) g.set(d, []);
+      g.get(d).push(i);
+    }
+    return [...g.entries()];
+  }, [filtradas]);
+
+  const toggleStatus = (s) => setFStatus((prev) => {
+    const n = new Set(prev);
+    if (n.has(s)) n.delete(s); else n.add(s);
+    return n;
+  });
+
+  const chip = (ativo) => ({
+    border: `1px solid ${ativo ? "#F5C518" : T.border}`,
+    background: ativo ? "#FFF8E1" : T.card,
+    color: ativo ? "#7A5B00" : T.textMuted,
+    borderRadius: 14, padding: "4px 10px", fontSize: 12,
+    fontWeight: ativo ? 700 : 500, cursor: "pointer",
+  });
+
+  const coleta = (() => {
+    if (!ultimaColeta) return null;
+    const dt = new Date(ultimaColeta.iniciada_em);
+    const quando = dt.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    if (ultimaColeta.sucesso === false) {
+      return <Badge color="#B00020" bg="#FDECEA">Última coleta {quando} · FALHOU</Badge>;
+    }
+    if (!ultimaColeta.finalizada_em && (Date.now() - dt.getTime()) > 5 * 60 * 1000) {
+      return <Badge color="#7A5B00" bg="#FFF3CD">Coleta {quando} interrompida</Badge>;
+    }
+    return (
+      <Badge color={T.textMuted} bg={T.card}>
+        Última coleta {quando} · {ultimaColeta.novas_inseridas ?? 0} nova(s)
+      </Badge>
+    );
+  })();
+
+  return (
+    <div style={{ padding: "18px 16px", maxWidth: 980, margin: "0 auto", textAlign: "left" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: T.text }}>Intimações</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {coleta}
+          <button onClick={carregar}
+            style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
+            ↻ Recarregar
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {Object.keys(INTIM_STATUS_LABEL).map((s) => (
+          <button key={s} onClick={() => toggleStatus(s)} style={chip(fStatus.has(s))}>
+            {INTIM_STATUS_LABEL[s]}
+          </button>
+        ))}
+        <select value={fTrib} onChange={(e) => setFTrib(e.target.value)}
+          style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
+          <option value="">Todos os tribunais</option>
+          {tribunais.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        {["alta", "media", "baixa"].map((u) => (
+          <button key={u} onClick={() => setFUrg(fUrg === u ? "" : u)} style={chip(fUrg === u)}>
+            {u === "alta" ? "Urgente" : u === "media" ? "Média" : "Baixa"}
+          </button>
+        ))}
+        <button onClick={() => setSoConferir(!soConferir)} style={chip(soConferir)}>⚠ Conferir</button>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar processo, parte ou texto…"
+          style={{ flex: 1, minWidth: 180, border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "5px 10px", fontSize: 12 }} />
+      </div>
+
+      {loading && <div style={{ color: T.textMuted, fontSize: 13, padding: 20 }}>Carregando…</div>}
+      {!loading && filtradas.length === 0 && (
+        <div style={{ color: T.textMuted, fontSize: 13, padding: 20 }}>
+          Nenhuma intimação para os filtros atuais.
+        </div>
+      )}
+
+      {porDia.map(([dia, lista]) => (
+        <div key={dia} style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: ".04em", textTransform: "uppercase", margin: "10px 0 6px" }}>
+            {intimDataBR(dia)} · {lista.length}
+          </div>
+          {lista.map((i) => {
+            const urg = INTIM_URG[i.urgencia] || INTIM_URG.baixa;
+            const tratada = i.status === "TRATADO" || i.status === "IGNORADO";
+            return (
+              <div key={i.id} onClick={() => setDetalhe(i)}
+                style={{
+                  background: T.card, border: `1px solid ${T.border}`,
+                  borderLeft: `3px solid ${i.urgencia === "alta" ? "#B00020" : T.border}`,
+                  borderRadius: 8, padding: "10px 12px", marginBottom: 8,
+                  cursor: "pointer", opacity: tratada ? 0.55 : 1,
+                }}>
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{i.numero_processo}</span>
+                  {i.tribunal && <Badge color={T.textMuted} bg={T.bg || "#EDF0F4"}>{i.tribunal}</Badge>}
+                  <Badge color={urg.c} bg={urg.bg}>{i.rotulo || i.classificacao}</Badge>
+                  {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
+                  {i.status !== "NOVO" && <Badge color={T.textMuted} bg={T.card}>{INTIM_STATUS_LABEL[i.status] || i.status}</Badge>}
+                </div>
+                {i.partes && <div style={{ fontSize: 12, color: T.text, marginTop: 4 }}>{i.partes}</div>}
+                {i.nome_orgao && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{i.nome_orgao}</div>}
+                {i.trecho && (
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {i.trecho}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {detalhe && (
+        <div onClick={() => setDetalhe(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: T.card, borderRadius: 12, maxWidth: 720, width: "100%", maxHeight: "85vh", overflow: "auto", padding: 18, textAlign: "left" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{detalhe.numero_processo}</div>
+              <button onClick={() => setDetalhe(null)}
+                style={{ border: "none", background: "transparent", color: T.textMuted, fontSize: 20, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {detalhe.tribunal && <Badge color={T.textMuted} bg={T.bg || "#EDF0F4"}>{detalhe.tribunal}</Badge>}
+              <Badge color={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).c} bg={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).bg}>
+                {detalhe.rotulo || detalhe.classificacao}
+              </Badge>
+              {detalhe.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ capturada só pelo nome — possível homônimo</Badge>}
+            </div>
+            {detalhe.partes && <div style={{ fontSize: 13, color: T.text, marginBottom: 4 }}>{detalhe.partes}</div>}
+            {detalhe.nome_orgao && <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{detalhe.nome_orgao} · disponibilizada em {intimDataBR(detalhe.data_disponibilizacao)}</div>}
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", background: T.bg || "#F8FAFC", borderRadius: 8, padding: 12 }}>
+              {detalhe.texto || detalhe.trecho || "(sem texto)"}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12 }}>
+              {detalhe.link && <a href={detalhe.link} target="_blank" rel="noreferrer" style={{ color: T.primary }}>abrir no DJEN ↗</a>}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: T.textMuted }}>
+              Classificação automática por padrões de texto — confira o inteiro teor antes de calcular prazo.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PainelAlvaras({ T, toast, user }) {
   const { items, loading, carregar } = useAlvaras(user?.id);
   const [detalhe, setDetalhe] = useState(null);
@@ -2808,6 +3037,7 @@ export default function App() {
           { key:"lista",      label:"Prazos",     ico:"list" },
           { key:"calendario", label:"Calendário", ico:"calendar" },
           { key:"tarefas",    label:"Tarefas",    ico:"check" },
+          { key:"intimacoes", label:"Intimações", ico:"mail" },
           { key:"djen",       label:"DJEN",       ico:"flag" },
           { key:"alvaras",    label:"Alvarás",    ico:"mail" },
           { key:"assinaturas", label:"Assinaturas", ico:"check" },
@@ -3096,6 +3326,7 @@ export default function App() {
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
+      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} />}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
       {aba === "assinaturas" && (
