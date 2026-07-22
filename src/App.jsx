@@ -2107,7 +2107,8 @@ const INTIM_URG = {
 };
 const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
 
-const corTribunal=(s)=>{const t=String(s||'');if(!t)return{c:'#4B5563',bg:'#EDF0F4'};let h=0;for(let i=0;i<t.length;i++)h=(h*37+t.charCodeAt(i))%360;return{c:'hsl('+h+',58%,30%)',bg:'hsl('+h+',68%,93%)'};};
+const CORES_TRIBUNAL={TJRS:['#1B5E20','#E3F2E4'],TJRJ:['#B23A00','#FCE9DE'],TJSP:['#7B1FA2','#F3E5F8'],TJSC:['#546E7A','#ECEFF1'],TJPR:['#AD1457','#FCE4EC'],TJDFT:['#4527A0','#EAE4F7'],TJDF:['#4527A0','#EAE4F7'],TRF4:['#01579B','#E1F0FA'],TJMG:['#795548','#EFE7E4'],TJBA:['#C62828','#FCE4E4'],TJGO:['#0277BD','#E0F2FB'],TJCE:['#00838F','#DCF2F4'],TJPE:['#558B2F','#EDF4E2'],TJPA:['#283593','#E4E7F5'],TJMA:['#6A1B9A','#F0E4F7'],TJMT:['#00796B','#DDF1EE'],TJSE:['#BF360C','#FBE6DE'],TJES:['#AD5A00','#FBEEDD'],TJPB:['#33691E','#EAF2DF'],TJRN:['#880E4F','#FBE2EE'],TJAL:['#0D47A1','#E2ECFA'],TJPI:['#4E342E','#EDE6E4'],TJMS:['#00600F','#DEEFE1'],TJAM:['#1A237E','#E3E5F3'],STJ:['#8E1A2F','#F7E4E7'],STF:['#212121','#EAEAEA'],TST:['#455A64','#E8EDEF'],TSE:['#5D4037','#EDE7E4'],TRF1:['#0288D1','#E0F3FB'],TRF2:['#00897B','#DDF2EF'],TRF3:['#5E35B1','#ECE5F7'],TRF5:['#C2185B','#FBE4EC'],TRF6:['#004D40','#DBEFEA']};
+const corTribunal=(s)=>{const t=String(s||'').toUpperCase();if(!t)return{c:'#4B5563',bg:'#EDF0F4'};const fix=CORES_TRIBUNAL[t];if(fix)return{c:fix[0],bg:fix[1]};let h=0;for(let i=0;i<t.length;i++)h=(h*131+t.charCodeAt(i))%1000000007;const mat=(h*47)%360,sat=64+(Math.floor(h/360)%14),lum=26+(Math.floor(h/7)%6),bgl=91+(Math.floor(h/13)%4);return{c:'hsl('+mat+','+sat+'%,'+lum+'%)',bg:'hsl('+mat+','+(sat+4)+'%,'+bgl+'%)'};};
 function intimDataBR(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || "");
@@ -2425,9 +2426,9 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
                     ? <span style={{ fontWeight: 600 }}>{clientes[i.numero_processo]}</span>
                     : (i.partes || "—")}
                 </div>
-                {i.nome_orgao && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{i.nome_orgao}</div>}
+                {i.nome_orgao && <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{i.nome_orgao}</div>}
                 {i.trecho && (
-                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  <div style={{ fontSize: 12, color: T.textSoft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {i.trecho}
                   </div>
                 )}
