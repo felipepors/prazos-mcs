@@ -2115,6 +2115,7 @@ function intimDataBR(iso) {
 
 function useIntimacoes(userId) {
   const [items, setItems] = useState([]);
+  const [clientes, setClientes] = useState({});
   const [loading, setLoading] = useState(true);
   const [ultimaColeta, setUltimaColeta] = useState(null);
   const carregar = async () => {
@@ -2123,10 +2124,18 @@ function useIntimacoes(userId) {
     if (!sb || !userId) { setLoading(false); return; }
     const { data, error } = await sb
       .from("intimacoes_oab")
-      .select("id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,texto")
+      .select("id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,texto,observacao")
       .order("data_disponibilizacao", { ascending: false })
       .limit(200);
     if (!error) setItems(data || []);
+    const { data: cl } = await sb
+      .from("intimacoes_clientes")
+      .select("numero_processo,cliente");
+    if (cl) {
+      const m = {};
+      for (const c of cl) m[c.numero_processo] = c.cliente;
+      setClientes(m);
+    }
     const { data: ex } = await sb
       .from("execucoes_coleta")
       .select("iniciada_em,finalizada_em,novas_inseridas,sucesso,erro,origem")
@@ -2136,17 +2145,85 @@ function useIntimacoes(userId) {
     setLoading(false);
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
-  return { items, loading, ultimaColeta, carregar };
+  return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar };
 }
 
-function PainelIntimacoes({ T, user }) {
-  const { items, loading, ultimaColeta, carregar } = useIntimacoes(user?.id);
+function PainelIntimacoes({ T, user, toast }) {
+  const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar } = useIntimacoes(user?.id);
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
   const [fUrg, setFUrg] = useState("");
   const [soConferir, setSoConferir] = useState(false);
   const [busca, setBusca] = useState("");
   const [detalhe, setDetalhe] = useState(null);
+
+  const [salvando, setSalvando] = useState(false);
+  const [obsEdit, setObsEdit] = useState("");
+  const [cliEdit, setCliEdit] = useState("");
+
+  useEffect(() => {
+    if (!detalhe) return;
+    setObsEdit(detalhe.observacao || "");
+    setCliEdit(clientes[detalhe.numero_processo] || "");
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [detalhe?.id]);
+
+  const patchLocal = (id, campos) => {
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...campos } : x)));
+    setDetalhe((d) => (d && d.id === id ? { ...d, ...campos } : d));
+  };
+
+  const gravar = async (id, campos) => {
+    const sb = await initSupabase();
+    if (!sb) return;
+    const antes = items.find((x) => x.id === id);
+    setSalvando(true);
+    patchLocal(id, campos);
+    const { error } = await sb.from("intimacoes_oab").update(campos).eq("id", id);
+    setSalvando(false);
+    if (error) {
+      if (antes) patchLocal(id, antes);
+      toast && toast("Erro ao gravar. Tente novamente.", "danger");
+    }
+  };
+
+  const gravarCliente = async (numero, nome) => {
+    const sb = await initSupabase();
+    if (!sb || !numero) return;
+    const v = String(nome || "").trim();
+    setSalvando(true);
+    const r = v
+      ? await sb.from("intimacoes_clientes").upsert(
+          { numero_processo: numero, user_id: user.id, cliente: v, atualizado_em: new Date().toISOString() },
+          { onConflict: "numero_processo" },
+        )
+      : await sb.from("intimacoes_clientes").delete().eq("numero_processo", numero);
+    setSalvando(false);
+    if (r.error) { toast && toast("Erro ao salvar cliente.", "danger"); return; }
+    setClientes((prev) => {
+      const n = { ...prev };
+      if (v) n[numero] = v; else delete n[numero];
+      return n;
+    });
+    toast && toast(v ? "Cliente salvo" : "Cliente removido", "success");
+  };
+
+  const btnStatus = (i, alvo, label) => {
+    const on = i.status === alvo;
+    return (
+      <button key={alvo} disabled={salvando}
+        onClick={(e) => { e.stopPropagation(); gravar(i.id, { status: on ? "NOVO" : alvo }); }}
+        style={{
+          border: `1px solid ${on ? "#F5C518" : T.border}`,
+          background: on ? "#FFF8E1" : T.card,
+          color: on ? "#7A5B00" : T.textMuted,
+          borderRadius: 8, padding: "3px 9px", fontSize: 11,
+          fontWeight: on ? 700 : 500, cursor: salvando ? "wait" : "pointer",
+        }}>
+        {label}
+      </button>
+    );
+  };
 
   const tribunais = useMemo(
     () => [...new Set(items.map((i) => i.tribunal).filter(Boolean))].sort(),
@@ -2162,13 +2239,13 @@ function PainelIntimacoes({ T, user }) {
       if (fUrg && i.urgencia !== fUrg) return false;
       if (soConferir && !i.requer_conferencia) return false;
       if (q) {
-        const alvoTxt = `${i.partes || ""} ${i.trecho || ""} ${i.rotulo || ""}`.toLowerCase();
+        const alvoTxt = `${clientes[i.numero_processo] || ""} ${i.partes || ""} ${i.trecho || ""} ${i.rotulo || ""}`.toLowerCase();
         const bateDig = qDig.length >= 4 && String(i.numero_processo_digitos || "").includes(qDig);
         if (!bateDig && !alvoTxt.includes(q)) return false;
       }
       return true;
     });
-  }, [items, fStatus, fTrib, fUrg, soConferir, busca]);
+  }, [items, clientes, fStatus, fTrib, fUrg, soConferir, busca]);
 
   const porDia = useMemo(() => {
     const g = new Map();
@@ -2276,13 +2353,22 @@ function PainelIntimacoes({ T, user }) {
                   {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
                   {i.status !== "NOVO" && <Badge color={T.textMuted} bg={T.card}>{INTIM_STATUS_LABEL[i.status] || i.status}</Badge>}
                 </div>
-                {i.partes && <div style={{ fontSize: 12, color: T.text, marginTop: 4 }}>{i.partes}</div>}
+                <div style={{ fontSize: 12, color: T.text, marginTop: 4 }}>
+                  {clientes[i.numero_processo]
+                    ? <span style={{ fontWeight: 600 }}>{clientes[i.numero_processo]}</span>
+                    : (i.partes || "—")}
+                </div>
                 {i.nome_orgao && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{i.nome_orgao}</div>}
                 {i.trecho && (
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {i.trecho}
                   </div>
                 )}
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  {btnStatus(i, "LIDO", "Lida")}
+                  {btnStatus(i, "TRATADO", "Tratada")}
+                  {btnStatus(i, "IGNORADO", "Ignorar")}
+                </div>
               </div>
             );
           })}
@@ -2314,7 +2400,50 @@ function PainelIntimacoes({ T, user }) {
             <div style={{ marginTop: 10, fontSize: 12 }}>
               {detalhe.link && <a href={detalhe.link} target="_blank" rel="noreferrer" style={{ color: T.primary }}>abrir no DJEN ↗</a>}
             </div>
-            <div style={{ marginTop: 10, fontSize: 11, color: T.textMuted }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+              {btnStatus(detalhe, "LIDO", "Lida")}
+              {btnStatus(detalhe, "TRATADO", "Tratada")}
+              {btnStatus(detalhe, "IGNORADO", "Ignorar")}
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                Cliente {(!clientes[detalhe.numero_processo] && (!detalhe.partes || /SIGILO/i.test(detalhe.partes))) ? "— processo sigiloso, cadastre" : ""}
+              </label>
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <input value={cliEdit} onChange={(e) => setCliEdit(e.target.value)}
+                  placeholder={detalhe.partes || "Nome do cliente"}
+                  style={{ flex: 1, border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "6px 10px", fontSize: 13 }} />
+                <button disabled={salvando} onClick={() => gravarCliente(detalhe.numero_processo, cliEdit)}
+                  style={{ border: "none", background: "#F5C518", color: "#1B2A4A", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: salvando ? "wait" : "pointer" }}>
+                  Salvar
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>
+                Vale para todas as intimações deste processo. Campo vazio + Salvar remove o cadastro.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                Observação
+              </label>
+              <textarea value={obsEdit} onChange={(e) => setObsEdit(e.target.value)} rows={3}
+                style={{ width: "100%", boxSizing: "border-box", marginTop: 4, border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
+              <button disabled={salvando || obsEdit === (detalhe.observacao || "")}
+                onClick={() => gravar(detalhe.id, { observacao: obsEdit.trim() || null })}
+                style={{
+                  marginTop: 6, border: `1px solid ${T.border}`,
+                  background: obsEdit === (detalhe.observacao || "") ? T.card : "#F5C518",
+                  color: obsEdit === (detalhe.observacao || "") ? T.textMuted : "#1B2A4A",
+                  borderRadius: 8, padding: "5px 14px", fontSize: 12, fontWeight: 700,
+                  cursor: obsEdit === (detalhe.observacao || "") ? "default" : "pointer",
+                }}>
+                Salvar observação
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 11, color: T.textMuted }}>
               Classificação automática por padrões de texto — confira o inteiro teor antes de calcular prazo.
             </div>
           </div>
@@ -3327,7 +3456,7 @@ export default function App() {
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
-      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} />}
+      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} />}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
       {aba === "assinaturas" && (
