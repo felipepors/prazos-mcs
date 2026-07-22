@@ -2156,6 +2156,26 @@ function PainelIntimacoes({ T, user, toast }) {
   const [soConferir, setSoConferir] = useState(false);
   const [busca, setBusca] = useState("");
   const [detalhe, setDetalhe] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+
+  const buscarAgora = async () => {
+    const sb = await initSupabase();
+    if (!sb) return;
+    if (de && ate && de > ate) { toast && toast("A data inicial e posterior a final.", "danger"); return; }
+    const body = { origem: "manual" };
+    if (de) body.data_inicio = de;
+    if (ate) body.data_fim = ate;
+    setBuscando(true);
+    const { data, error } = await sb.functions.invoke("buscar-intimacoes", { body });
+    setBuscando(false);
+    if (error) { toast && toast("Falha na busca: " + error.message, "danger"); return; }
+    const novas = data?.novas_inseridas ?? 0;
+    const total = data?.total_unicas ?? 0;
+    toast && toast(`${novas} nova(s) de ${total} encontrada(s)`, novas ? "success" : "info");
+    await carregar();
+  };
 
   const [salvando, setSalvando] = useState(false);
   const [obsEdit, setObsEdit] = useState("");
@@ -2299,6 +2319,28 @@ function PainelIntimacoes({ T, user, toast }) {
             ↻ Recarregar
           </button>
         </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        <button onClick={buscarAgora} disabled={buscando}
+          style={{ border: "none", background: buscando ? T.border : "#F5C518", color: buscando ? T.textMuted : "#1B2A4A", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: buscando ? "wait" : "pointer" }}>
+          {buscando ? "Buscando…" : "🔎 Buscar agora"}
+        </button>
+        <span style={{ fontSize: 11, color: T.textMuted }}>De</span>
+        <input type="date" value={de} onChange={(e) => setDe(e.target.value)} disabled={buscando}
+          style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
+        <span style={{ fontSize: 11, color: T.textMuted }}>até</span>
+        <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} disabled={buscando}
+          style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
+        {(de || ate) && (
+          <button onClick={() => { setDe(""); setAte(""); }} disabled={buscando}
+            style={{ border: `1px solid ${T.border}`, background: T.card, color: T.textMuted, borderRadius: 8, padding: "4px 9px", fontSize: 12, cursor: "pointer" }}>
+            ✕ limpar
+          </button>
+        )}
+        <span style={{ fontSize: 10, color: T.textMuted }}>
+          {de || ate ? "período informado" : "sem período = últimos 7 dias"}
+        </span>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
