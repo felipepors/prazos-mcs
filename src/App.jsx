@@ -2148,7 +2148,7 @@ function useIntimacoes(userId) {
   return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar };
 }
 
-function PainelIntimacoes({ T, user, toast }) {
+function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
   const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar } = useIntimacoes(user?.id);
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
@@ -2226,6 +2226,30 @@ function PainelIntimacoes({ T, user, toast }) {
       return n;
     });
     toast && toast(v ? "Cliente salvo" : "Cliente removido", "success");
+  };
+
+  const criarPrazo = (intim) => {
+    const parte = clientes[intim.numero_processo] || intim.partes || "";
+    const obs = [
+      `📨 Intimação — ${intimDataBR(intim.data_disponibilizacao)} · ${intim.tribunal || ""}`,
+      intim.rotulo ? `Classificação: ${intim.rotulo}` : "",
+      intim.trecho || "",
+    ].filter(Boolean).join("\n").trim();
+    setForm({
+      processo: intim.numero_processo || "",
+      parte,
+      tipo: "Prazo Geral",
+      dataLimite: "",            // EM BRANCO — calcular lendo o inteiro teor (CPC 224)
+      responsavel: "Felipe",
+      obs,
+      concluido: false,
+      prioridade: intim.urgencia === "alta" ? "alta" : (intim.urgencia === "media" ? "media" : "baixa"),
+      modoData: "final",
+      intimId: intim.id,
+    });
+    setModal("novo");
+    setAba("lista");
+    setDetalhe(null);
   };
 
   const btnStatus = (i, alvo, label) => {
@@ -2394,6 +2418,7 @@ function PainelIntimacoes({ T, user, toast }) {
                   <Badge color={urg.c} bg={urg.bg}>{i.rotulo || i.classificacao}</Badge>
                   {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
                   {i.status !== "NOVO" && <Badge color={T.textMuted} bg={T.card}>{INTIM_STATUS_LABEL[i.status] || i.status}</Badge>}
+                  {i.prazo_id && <Badge color="#1e7d46" bg="#E6F4EA">✓ prazo</Badge>}
                 </div>
                 <div style={{ fontSize: 12, color: T.text, marginTop: 4 }}>
                   {clientes[i.numero_processo]
@@ -2442,10 +2467,19 @@ function PainelIntimacoes({ T, user, toast }) {
             <div style={{ marginTop: 10, fontSize: 12 }}>
               {detalhe.link && <a href={detalhe.link} target="_blank" rel="noreferrer" style={{ color: T.primary }}>abrir no DJEN ↗</a>}
             </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
               {btnStatus(detalhe, "LIDO", "Lida")}
               {btnStatus(detalhe, "TRATADO", "Tratada")}
               {btnStatus(detalhe, "IGNORADO", "Ignorar")}
+              {detalhe.prazo_id
+                ? <Badge color="#1e7d46" bg="#E6F4EA">✓ prazo vinculado</Badge>
+                : <button onClick={() => criarPrazo(detalhe)}
+                    style={{ border: "none", background: "#1B2A4A", color: "#fff", borderRadius: 8, padding: "5px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    + Criar prazo →
+                  </button>}
+            </div>
+            <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
+              A data-limite abre em branco de propósito — calcule lendo o inteiro teor (CPC 224).
             </div>
 
             <div style={{ marginTop: 12 }}>
@@ -3022,8 +3056,10 @@ export default function App() {
   };
   const openEdit = p => { setForm({...p}); setModal(p.id); };
   const _salvarNovoForcado = (f) => {
-    setPrazos(prev => [...prev, {...f, id:Date.now()}]);
+    const novoId = Date.now();
+    setPrazos(prev => [...prev, {...f, id:novoId}]);
     if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(() => {}); }
+    if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(() => {}); }
     toast("Prazo criado","success");
     setModal(null);
     setConfirmDuplasPrazo(null);
@@ -3498,7 +3534,7 @@ export default function App() {
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
-      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} />}
+      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} setForm={setForm} setModal={setModal} setAba={setAba} />}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
       {aba === "assinaturas" && (
