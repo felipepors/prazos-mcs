@@ -3059,8 +3059,8 @@ export default function App() {
   const _salvarNovoForcado = (f) => {
     const novoId = Date.now();
     setPrazos(prev => [...prev, {...f, id:novoId}]);
-    if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(() => {}); }
-    if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(() => {}); }
+    if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou marcar a publicação DJEN como promovida. Confira na aba DJEN.", "danger"); }); }
+    if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou vincular a intimação — abra-a e marque como Tratada manualmente.", "danger"); }); }
     toast("Prazo criado","success");
     setModal(null);
     setConfirmDuplasPrazo(null);
