@@ -2119,16 +2119,32 @@ function useIntimacoes(userId) {
   const [clientes, setClientes] = useState({});
   const [loading, setLoading] = useState(true);
   const [ultimaColeta, setUltimaColeta] = useState(null);
+  const [temMais, setTemMais] = useState(false);
+  const SEL_LISTA = "id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,observacao";
+  const PAG = 50;
+  const carregarMais = async () => {
+    const sb = await initSupabase();
+    if (!sb || !userId) return;
+    const ofs = items.length;
+    const { data, error } = await sb.from("intimacoes_oab").select(SEL_LISTA)
+      .order("data_disponibilizacao", { ascending: false })
+      .order("id", { ascending: false })
+      .range(ofs, ofs + PAG - 1);
+    if (error || !data) return;
+    setItems((prev) => { const ids = new Set(prev.map((x) => x.id)); return [...prev, ...data.filter((d) => !ids.has(d.id))]; });
+    setTemMais(data.length === PAG);
+  };
   const carregar = async () => {
     setLoading(true);
     const sb = await initSupabase();
     if (!sb || !userId) { setLoading(false); return; }
     const { data, error } = await sb
       .from("intimacoes_oab")
-      .select("id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,texto,observacao")
+      .select(SEL_LISTA)
       .order("data_disponibilizacao", { ascending: false })
-      .limit(200);
-    if (!error) setItems(data || []);
+      .order("id", { ascending: false })
+      .range(0, PAG - 1);
+    if (!error) { setItems(data || []); setTemMais((data || []).length === PAG); }
     const { data: cl } = await sb
       .from("intimacoes_clientes")
       .select("numero_processo,cliente");
@@ -2146,11 +2162,11 @@ function useIntimacoes(userId) {
     setLoading(false);
   };
   useEffect(() => { carregar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
-  return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar };
+  return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais };
 }
 
 function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
-  const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar } = useIntimacoes(user?.id);
+  const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais } = useIntimacoes(user?.id);
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
   const [fUrg, setFUrg] = useState("");
@@ -2186,6 +2202,17 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
     if (!detalhe) return;
     setObsEdit(detalhe.observacao || "");
     setCliEdit(clientes[detalhe.numero_processo] || "");
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [detalhe?.id]);
+
+  useEffect(() => {
+    if (!detalhe || detalhe.texto != null) return;
+    (async () => {
+      const sb = await initSupabase();
+      if (!sb) return;
+      const { data } = await sb.from("intimacoes_oab").select("texto").eq("id", detalhe.id).single();
+      patchLocal(detalhe.id, { texto: (data && data.texto) || "" });
+    })();
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [detalhe?.id]);
 
@@ -2442,6 +2469,15 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
           })}
         </div>
       ))}
+
+      {temMais && !loading && (
+        <div style={{ textAlign: "center", margin: "6px 0 14px" }}>
+          <button onClick={() => carregarMais()}
+            style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "6px 16px", fontSize: 12, cursor: "pointer" }}>
+            ↓ Carregar mais 50
+          </button>
+        </div>
+      )}
 
       {detalhe && (
         <div onClick={() => setDetalhe(null)}
