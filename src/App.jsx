@@ -2105,9 +2105,10 @@ const INTIM_URG = {
   media: { c:"#7A5B00", bg:"#FFF3CD" },
   baixa: { c:"#4B5563", bg:"#EDF0F4" },
 };
+const INTIM_DEOAB_BADGE = { c:"#7A5B00", bg:"#FFFBEB" };
 const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
 
-const CORES_TRIBUNAL={TJRS:['#1B5E20','#E3F2E4'],TJRJ:['#B23A00','#FCE9DE'],TJSP:['#7B1FA2','#F3E5F8'],TJSC:['#546E7A','#ECEFF1'],TJPR:['#AD1457','#FCE4EC'],TJDFT:['#4527A0','#EAE4F7'],TJDF:['#4527A0','#EAE4F7'],TRF4:['#01579B','#E1F0FA'],TJMG:['#795548','#EFE7E4'],TJBA:['#C62828','#FCE4E4'],TJGO:['#0277BD','#E0F2FB'],TJCE:['#00838F','#DCF2F4'],TJPE:['#558B2F','#EDF4E2'],TJPA:['#283593','#E4E7F5'],TJMA:['#6A1B9A','#F0E4F7'],TJMT:['#00796B','#DDF1EE'],TJSE:['#BF360C','#FBE6DE'],TJES:['#AD5A00','#FBEEDD'],TJPB:['#33691E','#EAF2DF'],TJRN:['#880E4F','#FBE2EE'],TJAL:['#0D47A1','#E2ECFA'],TJPI:['#4E342E','#EDE6E4'],TJMS:['#00600F','#DEEFE1'],TJAM:['#1A237E','#E3E5F3'],STJ:['#8E1A2F','#F7E4E7'],STF:['#212121','#EAEAEA'],TST:['#455A64','#E8EDEF'],TSE:['#5D4037','#EDE7E4'],TRF1:['#0288D1','#E0F3FB'],TRF2:['#00897B','#DDF2EF'],TRF3:['#5E35B1','#ECE5F7'],TRF5:['#C2185B','#FBE4EC'],TRF6:['#004D40','#DBEFEA']};
+const CORES_TRIBUNAL={DEOAB:['#1B2A4A','#F5C518'],TJRS:['#1B5E20','#E3F2E4'],TJRJ:['#B23A00','#FCE9DE'],TJSP:['#7B1FA2','#F3E5F8'],TJSC:['#546E7A','#ECEFF1'],TJPR:['#AD1457','#FCE4EC'],TJDFT:['#4527A0','#EAE4F7'],TJDF:['#4527A0','#EAE4F7'],TRF4:['#01579B','#E1F0FA'],TJMG:['#795548','#EFE7E4'],TJBA:['#C62828','#FCE4E4'],TJGO:['#0277BD','#E0F2FB'],TJCE:['#00838F','#DCF2F4'],TJPE:['#558B2F','#EDF4E2'],TJPA:['#283593','#E4E7F5'],TJMA:['#6A1B9A','#F0E4F7'],TJMT:['#00796B','#DDF1EE'],TJSE:['#BF360C','#FBE6DE'],TJES:['#AD5A00','#FBEEDD'],TJPB:['#33691E','#EAF2DF'],TJRN:['#880E4F','#FBE2EE'],TJAL:['#0D47A1','#E2ECFA'],TJPI:['#4E342E','#EDE6E4'],TJMS:['#00600F','#DEEFE1'],TJAM:['#1A237E','#E3E5F3'],STJ:['#8E1A2F','#F7E4E7'],STF:['#212121','#EAEAEA'],TST:['#455A64','#E8EDEF'],TSE:['#5D4037','#EDE7E4'],TRF1:['#0288D1','#E0F3FB'],TRF2:['#00897B','#DDF2EF'],TRF3:['#5E35B1','#ECE5F7'],TRF5:['#C2185B','#FBE4EC'],TRF6:['#004D40','#DBEFEA']};
 const corTribunal=(s)=>{const t=String(s||'').toUpperCase();if(!t)return{c:'#4B5563',bg:'#EDF0F4'};const fix=CORES_TRIBUNAL[t];if(fix)return{c:fix[0],bg:fix[1]};let h=0;for(let i=0;i<t.length;i++)h=(h*131+t.charCodeAt(i))%1000000007;const mat=(h*47)%360,sat=64+(Math.floor(h/360)%14),lum=26+(Math.floor(h/7)%6),bgl=91+(Math.floor(h/13)%4);return{c:'hsl('+mat+','+sat+'%,'+lum+'%)',bg:'hsl('+mat+','+(sat+4)+'%,'+bgl+'%)'};};
 function intimDataBR(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
@@ -2430,18 +2431,19 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
             {intimDataBR(dia)} · {lista.length}
           </div>
           {lista.map((i) => {
-            const urg = INTIM_URG[i.urgencia] || INTIM_URG.baixa;
+            const deoab = i.tribunal === "DEOAB";
+            const urg = deoab ? INTIM_DEOAB_BADGE : (INTIM_URG[i.urgencia] || INTIM_URG.baixa);
             const tratada = i.status === "TRATADO" || i.status === "IGNORADO";
             return (
               <div key={i.id} onClick={() => setDetalhe(i)}
                 style={{
                   background: T.card, border: `1px solid ${T.border}`,
-                  borderLeft: `3px solid ${i.urgencia === "alta" ? "#B00020" : T.border}`,
+                  borderLeft: `3px solid ${deoab ? "#F5C518" : (i.urgencia === "alta" ? "#B00020" : T.border)}`,
                   borderRadius: 8, padding: "10px 12px", marginBottom: 8,
                   cursor: "pointer", opacity: tratada ? 0.55 : 1,
                 }}>
                 <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{i.numero_processo}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{i.numero_processo || (deoab ? "Publicação da OAB" : "—")}</span>
                   {i.tribunal && <Badge color={corTribunal(i.tribunal).c} bg={corTribunal(i.tribunal).bg}>{i.tribunal}</Badge>}
                   <Badge color={urg.c} bg={urg.bg}>{i.rotulo || i.classificacao}</Badge>
                   {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
@@ -2485,13 +2487,13 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
           <div onClick={(e) => e.stopPropagation()}
             style={{ background: T.card, borderRadius: 12, maxWidth: 720, width: "100%", maxHeight: "85vh", overflow: "auto", padding: 18, textAlign: "left" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{detalhe.numero_processo}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{detalhe.numero_processo || (detalhe.tribunal === "DEOAB" ? "Publicação da OAB" : "—")}</div>
               <button onClick={() => setDetalhe(null)}
                 style={{ border: "none", background: "transparent", color: T.textMuted, fontSize: 20, cursor: "pointer" }}>×</button>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {detalhe.tribunal && <Badge color={corTribunal(detalhe.tribunal).c} bg={corTribunal(detalhe.tribunal).bg}>{detalhe.tribunal}</Badge>}
-              <Badge color={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).c} bg={(INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa).bg}>
+              <Badge color={(detalhe.tribunal === "DEOAB" ? INTIM_DEOAB_BADGE : (INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa)).c} bg={(detalhe.tribunal === "DEOAB" ? INTIM_DEOAB_BADGE : (INTIM_URG[detalhe.urgencia] || INTIM_URG.baixa)).bg}>
                 {detalhe.rotulo || detalhe.classificacao}
               </Badge>
               {detalhe.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ capturada só pelo nome — possível homônimo</Badge>}
@@ -2502,7 +2504,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
               {detalhe.texto || detalhe.trecho || "(sem texto)"}
             </div>
             <div style={{ marginTop: 10, fontSize: 12 }}>
-              {detalhe.link && <a href={detalhe.link} target="_blank" rel="noreferrer" style={{ color: T.primary }}>abrir no DJEN ↗</a>}
+              {detalhe.link && <a href={detalhe.link} target="_blank" rel="noreferrer" style={{ color: T.primary }}>abrir no {detalhe.tribunal === "DEOAB" ? "DEOAB" : "DJEN"} ↗</a>}
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
               {btnStatus(detalhe, "LIDO", "Lida")}
