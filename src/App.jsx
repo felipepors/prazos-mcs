@@ -2171,7 +2171,7 @@ function useIntimacoes(userId) {
   return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais };
 }
 
-function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
+function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContagem }) {
   const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais } = useIntimacoes(user?.id);
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
@@ -2198,6 +2198,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
     const total = data?.total_unicas ?? 0;
     toast && toast(`${novas} nova(s) de ${total} encontrada(s)`, novas ? "success" : "info");
     await carregar();
+    onContagem && onContagem();
   };
 
   const [salvando, setSalvando] = useState(false);
@@ -2238,6 +2239,8 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
     if (error) {
       if (antes) patchLocal(id, antes);
       toast && toast("Erro ao gravar. Tente novamente.", "danger");
+    } else if (campos.status !== undefined && onContagem) {
+      onContagem();
     }
   };
 
@@ -2372,7 +2375,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba }) {
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: T.text }}>Intimações</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {coleta}
-          <button onClick={carregar}
+          <button onClick={() => { carregar(); onContagem && onContagem(); }}
             style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>
             ↻ Recarregar
           </button>
@@ -2988,6 +2991,14 @@ export default function App() {
   const [aba, setAba]                   = useState("lista");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [mostrarLeads, setMostrarLeads] = useState(false); // "Acompanhar" ocultos por padrão
+  const [novasIntim, setNovasIntim]     = useState(null); // contador de intimações NOVO (spec v2 §6)
+  const atualizarNovasIntim = async () => {
+    const sb = await initSupabase();
+    if (!sb || !user?.id) return;
+    const { count, error } = await sb.from("intimacoes_oab").select("id", { count: "exact", head: true }).eq("status", "NOVO");
+    if (!error) setNovasIntim(count ?? 0);
+  };
+  useEffect(() => { atualizarNovasIntim(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id, aba]);
   const [menuMobile, setMenuMobile]     = useState(false);
 
   // Modais
@@ -3112,7 +3123,7 @@ export default function App() {
     const novoId = Date.now();
     setPrazos(prev => [...prev, {...f, id:novoId}]);
     if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou marcar a publicação DJEN como promovida. Confira na aba DJEN.", "danger"); }); }
-    if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou vincular a intimação — abra-a e marque como Tratada manualmente.", "danger"); }); }
+    if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou vincular a intimação — abra-a e marque como Tratada manualmente.", "danger"); else atualizarNovasIntim(); }); }
     toast(ehLead(f) && !mostrarLeads ? "Salvo como Acompanhar — fica oculto. Use \"Mostrar leads\" para ver." : "Prazo criado","success");
     setModal(null);
     setConfirmDuplasPrazo(null);
@@ -3314,6 +3325,10 @@ export default function App() {
             }}>
             <Icon name={ico} size={15} color={aba===key?T.primary:T.textMuted} />
             {label}
+            {key === "intimacoes" && novasIntim > 0 && (
+              <span title={`${novasIntim} intimação(ões) NOVO — ainda não cumprida(s)`} aria-label={`${novasIntim} novas`}
+                style={{ background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:16, lineHeight:"16px", textAlign:"center" }}>{novasIntim}</span>
+            )}
           </button>
         ))}
       </div>
@@ -3599,7 +3614,7 @@ export default function App() {
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
-      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} setForm={setForm} setModal={setModal} setAba={setAba} />}
+      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} setForm={setForm} setModal={setModal} setAba={setAba} onContagem={atualizarNovasIntim} />}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
       {aba === "assinaturas" && (
