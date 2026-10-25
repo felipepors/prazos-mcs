@@ -302,6 +302,11 @@ const TIPOS_DEFAULT = [
   "Memorial","Prazo Geral","Recurso Especial","Recurso Extraordinário","Réplica","Tutela de Urgência"
 ];
 
+// Leads comerciais (busca por medicamentos) usam o tipo "Acompanhar". Não são
+// prazo processual: ficam ocultos por padrão na aba Prazos, no calendário e no
+// resumo de vencidos (decisão de 24/10/2026). Já aparecem na aba DJEN.
+const ehLead = (p) => p.tipo === "Acompanhar";
+
 // Identifica o tribunal a partir do número CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO).
 // J = segmento (8 Estadual, 4 Federal, 5 Trabalho...); TR = código do tribunal.
 // Não armazena nada — deriva do próprio número. Retorna null se não reconhecer.
@@ -2982,6 +2987,7 @@ export default function App() {
   const [filtroTarefa, setFiltroTarefa] = useState("todas");
   const [aba, setAba]                   = useState("lista");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [mostrarLeads, setMostrarLeads] = useState(false); // "Acompanhar" ocultos por padrão
   const [menuMobile, setMenuMobile]     = useState(false);
 
   // Modais
@@ -3046,7 +3052,7 @@ export default function App() {
   const prazosComStatus = useMemo(() => prazos.map(p => ({ ...p, status: calcStatus(p.dataLimite, p.concluido) })), [prazos]);
 
   const resumoData = useMemo(() => {
-    const ativos = prazosComStatus.filter(p => !p.concluido);
+    const ativos = prazosComStatus.filter(p => !p.concluido && !ehLead(p));
     const srt = arr => [...arr].sort((a,b) => new Date(a.dataLimite)-new Date(b.dataLimite));
     return {
       vencidos: srt(ativos.filter(p => p.status==="vencido")),
@@ -3060,6 +3066,7 @@ export default function App() {
     const stOrd = { vencido:0, urgente:1, proximo:2, normal:3, concluido:4 };
     return prazosComStatus
       .filter(p => {
+        if (!mostrarLeads && !busca && ehLead(p)) return false;
         if (filtro !== "todos" && p.status !== filtro) return false;
         if (filtroPrioridade !== "todas" && (p.prioridade||"media") !== filtroPrioridade) return false;
         if (filtroResp !== "todos" && p.responsavel !== filtroResp) return false;
@@ -3081,16 +3088,23 @@ export default function App() {
           default:           return 0;
         }
       });
-  }, [prazosComStatus, filtro, filtroPrioridade, filtroResp, busca, ordenacao]);
+  }, [prazosComStatus, filtro, filtroPrioridade, filtroResp, busca, ordenacao, mostrarLeads]);
+
+  const qtdLeads = useMemo(() => prazos.filter(ehLead).length, [prazos]);
+  const prazosVisiveis = useMemo(
+    () => (mostrarLeads ? prazosComStatus : prazosComStatus.filter(p => !ehLead(p))),
+    [prazosComStatus, mostrarLeads]
+  );
 
   const contadores = useMemo(() => {
-    const c = { vencido:0, urgente:0, proximo:0, normal:0, concluido:0, todos:prazos.length };
-    prazos.forEach(p => { c[calcStatus(p.dataLimite, p.concluido)]++; });
+    const base = mostrarLeads ? prazos : prazos.filter(p => !ehLead(p));
+    const c = { vencido:0, urgente:0, proximo:0, normal:0, concluido:0, todos:base.length };
+    base.forEach(p => { c[calcStatus(p.dataLimite, p.concluido)]++; });
     return c;
-  }, [prazos]);
+  }, [prazos, mostrarLeads]);
 
   const openNovo = (dataLimite="") => {
-    setForm({ processo:"", parte:"", tipo:"Acompanhar", dataLimite, responsavel:"Felipe", obs:"", concluido:false, prioridade:"media", modoData:"final" });
+    setForm({ processo:"", parte:"", tipo:"Prazo Geral", dataLimite, responsavel:"Felipe", obs:"", concluido:false, prioridade:"media", modoData:"final" });
     setModal("novo");
   };
   const openEdit = p => { setForm({...p}); setModal(p.id); };
@@ -3099,7 +3113,7 @@ export default function App() {
     setPrazos(prev => [...prev, {...f, id:novoId}]);
     if (f.djenId && _sb) { _sb.from("publicacoes_djen").update({ status: "PROMOVIDO" }).eq("id", f.djenId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou marcar a publicação DJEN como promovida. Confira na aba DJEN.", "danger"); }); }
     if (f.intimId && _sb) { _sb.from("intimacoes_oab").update({ prazo_id: String(novoId), status: "TRATADO" }).eq("id", f.intimId).then(({ error }) => { if (error) toast("Prazo criado, mas falhou vincular a intimação — abra-a e marque como Tratada manualmente.", "danger"); }); }
-    toast("Prazo criado","success");
+    toast(ehLead(f) && !mostrarLeads ? "Salvo como Acompanhar — fica oculto. Use \"Mostrar leads\" para ver." : "Prazo criado","success");
     setModal(null);
     setConfirmDuplasPrazo(null);
   };
@@ -3330,6 +3344,18 @@ export default function App() {
             ))}
           </div>
 
+          {qtdLeads > 0 && (
+            <div style={{ padding:"8px 16px 0", fontSize:11, color:T.textMuted, display:"flex", alignItems:"center", gap:6 }}>
+              {mostrarLeads
+                ? `Mostrando ${qtdLeads} lead(s) de medicamentos (Acompanhar)`
+                : `${qtdLeads} lead(s) de medicamentos (Acompanhar) oculto(s)`}
+              <button onClick={() => setMostrarLeads(v => !v)}
+                style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:11, fontWeight:600, padding:0 }}>
+                {mostrarLeads ? "Ocultar" : "Mostrar leads"}
+              </button>
+            </div>
+          )}
+
           {/* Busca + botão filtros */}
           <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
             <div style={{ position:"relative", flex:1 }}>
@@ -3498,7 +3524,7 @@ export default function App() {
       )}
 
       {/* ══ ABA CALENDÁRIO ══ */}
-      {aba === "calendario" && <Calendario prazos={prazosComStatus} onEdit={openEdit} onNovoData={openNovo} feriadosNomes={feriadosNomes} T={T} modo={modo} onToast={toast} />}
+      {aba === "calendario" && <Calendario prazos={prazosVisiveis} onEdit={openEdit} onNovoData={openNovo} feriadosNomes={feriadosNomes} T={T} modo={modo} onToast={toast} />}
 
       {/* ══ ABA TAREFAS ══ */}
       {aba === "tarefas" && (() => {
