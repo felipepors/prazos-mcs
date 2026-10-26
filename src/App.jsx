@@ -1059,10 +1059,7 @@ function TelaLogin({ T, modo, onToast }) {
             style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
             {loading ? "Aguarde..." : criando ? "Criar conta" : "Entrar"}
           </button>
-          <button onClick={() => { setCriando(!criando); setErro(""); }}
-            style={{ background:"transparent", border:"none", color:T.primary, fontSize:13, cursor:"pointer", marginTop:4 }}>
-            {criando ? "Já tenho conta · Entrar" : "Não tenho conta · Criar uma"}
-          </button>
+          {/* v31b — cadastro fechado no Supabase (02/08): link "Criar uma" removido. Conta nova: painel do Supabase → Add user. */}
         </div>
         <div style={{ marginTop:20, padding:"10px 12px", background:T.cardAlt, borderRadius:8, fontSize:11, color:T.textMuted, lineHeight:1.5 }}>
           🔒 Seus dados ficam armazenados de forma segura no Supabase e sincronizam automaticamente em todos os seus dispositivos.
