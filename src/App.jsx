@@ -3327,10 +3327,10 @@ export default function App() {
       {/* ── ABAS ── */}
       <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, display:"flex", overflowX:"auto", position:"sticky", top:64, zIndex:40 }}>
         {[
-          { key:"lista",      label:"Prazos",     ico:"list" },
-          { key:"calendario", label:"Calendário", ico:"calendar" },
-          { key:"tarefas",    label:"Tarefas",    ico:"check" },
           { key:"intimacoes", label:"Intimações", ico:"mail" },
+          { key:"lista",      label:"Prazos",     ico:"list" },
+          { key:"tarefas",    label:"Tarefas",    ico:"check" },
+          { key:"calendario", label:"Calendário", ico:"calendar" },
           { key:"djen",       label:"DJEN",       ico:"flag" },
           { key:"alvaras",    label:"Alvarás",    ico:"mail" },
           { key:"assinaturas", label:"Assinaturas", ico:"check" },
