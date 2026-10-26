@@ -1059,10 +1059,7 @@ function TelaLogin({ T, modo, onToast }) {
             style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
             {loading ? "Aguarde..." : criando ? "Criar conta" : "Entrar"}
           </button>
-          <button onClick={() => { setCriando(!criando); setErro(""); }}
-            style={{ background:"transparent", border:"none", color:T.primary, fontSize:13, cursor:"pointer", marginTop:4 }}>
-            {criando ? "Já tenho conta · Entrar" : "Não tenho conta · Criar uma"}
-          </button>
+          {/* v31b — cadastro fechado no Supabase (02/08): link "Criar uma" removido. Conta nova: painel do Supabase → Add user. */}
         </div>
         <div style={{ marginTop:20, padding:"10px 12px", background:T.cardAlt, borderRadius:8, fontSize:11, color:T.textMuted, lineHeight:1.5 }}>
           🔒 Seus dados ficam armazenados de forma segura no Supabase e sincronizam automaticamente em todos os seus dispositivos.
@@ -1295,6 +1292,23 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
+// v31 — excluir prazo desfaz o vinculo com a intimacao (prazo_id orfao).
+// Limpa prazo_id; se a intimacao estava TRATADO (gravado pelo proprio vinculo),
+// volta para NOVO. LIDO e IGNORADO foram decisao do Felipe e ficam como estao.
+async function desvincularIntimacoes(prazoIds) {
+  if (!_sb || !prazoIds || !prazoIds.length) return { error: null, n: 0, voltaramNovo: 0 };
+  const { data, error } = await _sb.from("intimacoes_oab").select("id,status").in("prazo_id", prazoIds.map(String));
+  if (error) return { error, n: 0, voltaramNovo: 0 };
+  let voltaramNovo = 0;
+  for (const r of data || []) {
+    const novoStatus = r.status === "TRATADO" ? "NOVO" : r.status;
+    const { error: e } = await _sb.from("intimacoes_oab").update({ prazo_id: null, status: novoStatus }).eq("id", r.id);
+    if (e) return { error: e, n: 0, voltaramNovo };
+    if (novoStatus !== r.status) voltaramNovo++;
+  }
+  return { error: null, n: (data || []).length, voltaramNovo };
+}
+
 function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toast, irParaPrazo, processoAlvo, onProcessoAlvoConsumido }) {
   const { items, loading, atualizarStatus, atualizarAcompanhar, atualizarObservacao, remover, adicionarProcessoManual } = usePublicacoesDjen();
   const [detalhe, setDetalhe] = useState(null);
@@ -1811,6 +1825,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
           const ids = new Set(vinculados.map(p => p.id));
           remover(pub.id);
           setPrazos(prev => prev.filter(p => !ids.has(p.id)));
+          desvincularIntimacoes([...ids]).then(({ error }) => { if (error) toast("Prazos apagados, mas falhou desvincular a intimação vinculada — confira na aba Intimações.", "danger"); });
           setDetalhe(null);
           setConfirmApagar(null);
           toast(`Publicação + ${vinculados.length} prazo(s) apagados`,"danger");
@@ -3156,7 +3171,13 @@ export default function App() {
     setPrazos(prev => prev.map(x => x.id === id ? {...x, concluido:!x.concluido} : x));
     toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
   };
-  const deletar = id => { setPrazos(prev => prev.filter(p => p.id !== id)); setConfirmDel(null); toast("Prazo excluído","danger"); };
+  const deletar = id => {
+    setPrazos(prev => prev.filter(p => p.id !== id)); setConfirmDel(null); toast("Prazo excluído","danger");
+    desvincularIntimacoes([id]).then(({ error, voltaramNovo }) => {
+      if (error) toast("Prazo excluído, mas falhou desvincular a intimação — abra-a na aba Intimações e confira.", "danger");
+      else if (voltaramNovo > 0) { toast("A intimação vinculada voltou para NOVO", "info"); atualizarNovasIntim(); }
+    });
+  };
   const toggleOrcamento = id => {
     const p = prazos.find(x => x.id === id);
     setPrazos(prev => prev.map(x => x.id === id ? {...x, orcamentoEnviado: !x.orcamentoEnviado} : x));
@@ -4363,7 +4384,10 @@ export default function App() {
               </div>
             </div>
             <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:5 }}>Excluir este prazo?</div>
-            <div style={{ fontSize:12, color:T.textMuted, marginBottom:18 }}>Esta ação não pode ser desfeita.</div>
+            <div style={{ fontSize:12, color:T.textMuted, marginBottom:(prazos.find(p => p.id === confirmDel) || {}).intimId ? 6 : 18 }}>Esta ação não pode ser desfeita.</div>
+            {(prazos.find(p => p.id === confirmDel) || {}).intimId && (
+              <div style={{ fontSize:12, color:T.textSoft, marginBottom:18 }}>A intimação que originou o prazo perde o vínculo e, se estava Tratada, volta para NOVO.</div>
+            )}
             <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
               <button onClick={() => setConfirmDel(null)} style={BTN_GHOST}>Cancelar</button>
               <button onClick={() => deletar(confirmDel)} style={{ background:T.danger, border:"none", borderRadius:10, padding:"10px 18px", color:"#fff", fontWeight:600, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", gap:6 }}>
