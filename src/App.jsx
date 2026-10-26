@@ -263,7 +263,7 @@ async function fazerLogout() {
 const TEMA = {
   light: {
     bg:"#F7F6F2", card:"#fff", cardAlt:"#FBFAF6", border:"#E8E5DC", borderStrong:"#D5D1C5",
-    text:"#1B2A4A", textSoft:"#52617E", textMuted:"#9AA3B5",
+    text:"#1B2A4A", textSoft:"#52617E", textMuted:"#6B7892",
     primary:"#1B2A4A", primaryHover:"#13203A", primarySoft:"#EEF1F7", primaryText:"#fff",
     accent:"#F5C518", overlay:"#1B2A4A55",
     danger:"#e53e3e", dangerSoft:"#fff5f5", dangerBorder:"#fed7d7",
@@ -272,7 +272,7 @@ const TEMA = {
   },
   dark: {
     bg:"#0F1626", card:"#18233B", cardAlt:"#22304D", border:"#2A3A5C", borderStrong:"#3D5078",
-    text:"#F2F4F8", textSoft:"#B8C2D8", textMuted:"#7C8AA5",
+    text:"#F2F4F8", textSoft:"#B8C2D8", textMuted:"#8E9BB5",
     primary:"#F5C518", primaryHover:"#FFD43B", primarySoft:"#2A3A5C", primaryText:"#1B2A4A",
     accent:"#F5C518", overlay:"#00000099",
     danger:"#fc8181", dangerSoft:"#742a2a", dangerBorder:"#9b2c2c",
@@ -3339,12 +3339,12 @@ export default function App() {
             style={{
               background:"transparent", border:"none",
               borderBottom:`2.5px solid ${aba===key?"#F5C518":"transparent"}`,
-              color: aba===key ? T.primary : T.textMuted,
+              color: aba===key ? T.primary : T.textSoft,
               cursor:"pointer", padding:"12px 18px", fontSize:13,
               fontWeight: aba===key ? 700 : 500,
               display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
             }}>
-            <Icon name={ico} size={15} color={aba===key?T.primary:T.textMuted} />
+            <Icon name={ico} size={15} color={aba===key?T.primary:T.textSoft} />
             {label}
             {key === "intimacoes" && novasIntim > 0 && (
               <span title={`${novasIntim} intimação(ões) NOVO — ainda não cumprida(s)`} aria-label={`${novasIntim} novas`}
