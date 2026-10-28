@@ -1294,7 +1294,8 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
 // v31 — excluir prazo desfaz o vinculo com a intimacao (prazo_id orfao).
-// v34 — novo cabeçalho: logo + nome do sistema "MCS Prazos" (sem repetir o nome do escritório).
+// v34 — novo cabeçalho: nome do escritório em destaque + sistema "MCS Prazos".
+// v34b — nome do escritório em texto (era o PNG, ilegível no celular); tamanho fluido no celular.
 // Limpa prazo_id; se a intimacao estava TRATADO (gravado pelo proprio vinculo),
 // volta para NOVO. LIDO e IGNORADO foram decisao do Felipe e ficam como estao.
 async function desvincularIntimacoes(prazoIds) {
@@ -3281,7 +3282,18 @@ export default function App() {
         .hdr-btn:hover { background:rgba(255,255,255,0.16); border-color:rgba(255,255,255,0.26); }
         .hdr-btn.alerta { background:#F5C518; border-color:#F5C518; color:#1B2A4A; }
         .hdr-btn.alerta:hover { background:#ffd23f; border-color:#ffd23f; }
-        @media (max-width: 520px) { .hdr-sys { display:none !important; } .hdr-logo { height:20px !important; } }
+        .hdr-nome { font-family:Georgia,'Gelasio','Times New Roman',serif; font-size:15px; font-weight:700; color:#fff; letter-spacing:0.3px; line-height:1.05; white-space:nowrap; }
+        .hdr-adv { font-size:8.5px; font-weight:700; color:#F5C518; letter-spacing:3px; text-transform:uppercase; }
+        @media (max-width: 520px) {
+          .hdr-sys { display:none !important; }
+          .hdr-wrap { padding-left:calc(12px + env(safe-area-inset-left, 0px)) !important; padding-right:calc(12px + env(safe-area-inset-right, 0px)) !important; }
+          .hdr-left { gap:8px !important; }
+          .hdr-right { gap:6px !important; }
+          .hdr-ico { width:34px !important; height:34px !important; }
+          .hdr-btn { width:34px; height:34px; border-radius:10px; }
+          .hdr-nome { font-size:clamp(11px, 3.1vw, 14px); letter-spacing:0; }
+          .hdr-adv { font-size:8px; letter-spacing:2.2px; }
+        }
         @media print {
           body * { visibility: hidden !important; }
           .print-area, .print-area * { visibility: visible !important; overflow: visible !important; max-height: none !important; }
@@ -3291,7 +3303,7 @@ export default function App() {
       `}</style>
 
       {/* ── HEADER ── */}
-      <header style={{
+      <header className="hdr-wrap" style={{
         background: modo==="dark"
           ? "linear-gradient(180deg, #0F1A2E 0%, #0B1220 100%)"
           : "linear-gradient(180deg, #223558 0%, #1B2A4A 100%)",
@@ -3300,18 +3312,24 @@ export default function App() {
         position:"sticky", top:0, zIndex:50, boxShadow:"0 4px 16px #00000033",
       }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, height:40 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}>
-            <img src="/icon-512.png" alt="MCS" style={{ width:38, height:38, borderRadius:"50%", objectFit:"cover", flexShrink:0, boxShadow:"0 0 0 2px rgba(245,197,24,0.7)" }} />
-            <img className="hdr-logo" src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados"
-              style={{ height:26, display:"block", filter:"brightness(0) invert(1)", opacity:0.95, flexShrink:0 }} />
-            <span className="hdr-sys" aria-hidden="true" style={{ width:1, height:26, background:"rgba(255,255,255,0.18)", flexShrink:0 }} />
-            <span className="hdr-sys" style={{ display:"flex", flexDirection:"column", lineHeight:1.1, minWidth:0 }}>
+          <div className="hdr-left" style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}>
+            <img className="hdr-ico" src="/icon-512.png" alt="MCS" style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", flexShrink:0, boxShadow:"0 0 0 2px #F5C518" }} />
+            <span style={{ display:"flex", flexDirection:"column", minWidth:0, flexShrink:0 }}>
+              <span className="hdr-nome">Martins, Corrêa da Silva</span>
+              <span aria-hidden="true" style={{ display:"flex", alignItems:"center", gap:7, marginTop:1, lineHeight:1 }}>
+                <span style={{ height:2, flex:1, background:"#F5C518", borderRadius:1 }} />
+                <span className="hdr-adv">Advogados</span>
+                <span style={{ height:2, flex:1, background:"#F5C518", borderRadius:1 }} />
+              </span>
+            </span>
+            <span className="hdr-sys" aria-hidden="true" style={{ width:1, height:28, background:"rgba(255,255,255,0.2)", flexShrink:0, margin:"0 2px" }} />
+            <span className="hdr-sys" style={{ display:"flex", flexDirection:"column", lineHeight:1.15, minWidth:0 }}>
               <span style={{ fontSize:14, fontWeight:700, color:"#fff", letterSpacing:0.2, whiteSpace:"nowrap" }}>MCS Prazos</span>
               <span style={{ fontSize:9.5, fontWeight:600, color:"#F5C518", letterSpacing:1.4, textTransform:"uppercase", whiteSpace:"nowrap" }}>Gestão processual</span>
             </span>
             <h1 style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0 0 0 0)", margin:-1 }}>MCS Prazos — Martins, Corrêa da Silva Advogados</h1>
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
+          <div className="hdr-right" style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
             <button className="hdr-btn" onClick={() => setModo(modo==="light"?"dark":"light")}
               title="Alternar tema" aria-label={modo==="light"?"Ativar tema escuro":"Ativar tema claro"}>
               <Icon name={modo==="light"?"moon":"sun"} size={18} color="#fff" />
