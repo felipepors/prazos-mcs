@@ -1040,7 +1040,8 @@ function TelaLogin({ T, modo, onToast }) {
           <div style={{ background:T.primary, width:60, height:60, borderRadius:"50%", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:12 }}>
             <img src="/icon-512.png" alt="MCS" style={{ width:54, height:54, borderRadius:"50%", objectFit:"cover" }} />
           </div>
-          <h1 style={{ margin:0, fontSize:20, fontWeight:700, color:T.text }}>Sistema Martins, Corrêa da Silva Advogados</h1>
+          <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:T.text, letterSpacing:-0.2 }}>MCS Prazos</h1>
+          <div style={{ fontSize:10, fontWeight:600, color:"#C9A10E", letterSpacing:1.6, textTransform:"uppercase", marginTop:2 }}>Gestão processual</div>
           <div style={{ fontSize:12, color:T.textMuted, marginTop:4 }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:36, display:"block", margin:"4px auto 0", filter: modo==="dark" ? "brightness(0) invert(1)" : "none" }} /></div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -1293,6 +1294,7 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 
 // ── Painel principal da aba DJEN ─────────────────────────────────────────────
 // v31 — excluir prazo desfaz o vinculo com a intimacao (prazo_id orfao).
+// v34 — novo cabeçalho: logo + nome do sistema "MCS Prazos" (sem repetir o nome do escritório).
 // Limpa prazo_id; se a intimacao estava TRATADO (gravado pelo proprio vinculo),
 // volta para NOVO. LIDO e IGNORADO foram decisao do Felipe e ficam como estao.
 async function desvincularIntimacoes(prazoIds) {
@@ -3273,6 +3275,13 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
         input, select, textarea { font-family: inherit; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
+        .hdr-btn { width:38px; height:38px; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
+          background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#fff; cursor:pointer;
+          position:relative; transition:background .15s, border-color .15s; }
+        .hdr-btn:hover { background:rgba(255,255,255,0.16); border-color:rgba(255,255,255,0.26); }
+        .hdr-btn.alerta { background:#F5C518; border-color:#F5C518; color:#1B2A4A; }
+        .hdr-btn.alerta:hover { background:#ffd23f; border-color:#ffd23f; }
+        @media (max-width: 520px) { .hdr-sys { display:none !important; } .hdr-logo { height:20px !important; } }
         @media print {
           body * { visibility: hidden !important; }
           .print-area, .print-area * { visibility: visible !important; overflow: visible !important; max-height: none !important; }
@@ -3281,42 +3290,45 @@ export default function App() {
         }
       `}</style>
 
-      {/* ── HEADER COMPACTO ── */}
+      {/* ── HEADER ── */}
       <header style={{
-        background: modo==="dark" ? "#0B1220" : "#1B2A4A",
-        padding:"calc(14px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 14px calc(16px + env(safe-area-inset-left, 0px))", position:"sticky", top:0, zIndex:50,
-        boxShadow:"0 2px 8px #00000022",
+        background: modo==="dark"
+          ? "linear-gradient(180deg, #0F1A2E 0%, #0B1220 100%)"
+          : "linear-gradient(180deg, #223558 0%, #1B2A4A 100%)",
+        borderBottom:"1px solid rgba(245,197,24,0.55)",
+        padding:"calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px))",
+        position:"sticky", top:0, zIndex:50, boxShadow:"0 4px 16px #00000033",
       }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-            <img src="/icon-512.png" alt="MCS" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
-            <div style={{ minWidth:0 }}>
-              <h1 style={{ fontSize:16, fontWeight:700, margin:0, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Sistema Martins, Corrêa da Silva Advogados</h1>
-              <div style={{ fontSize:10, color:"#bee3f8cc", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:28, display:"block", marginTop:0, filter:"brightness(0) invert(1)", opacity:0.9 }} /></div>
-            </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, height:40 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}>
+            <img src="/icon-512.png" alt="MCS" style={{ width:38, height:38, borderRadius:"50%", objectFit:"cover", flexShrink:0, boxShadow:"0 0 0 2px rgba(245,197,24,0.7)" }} />
+            <img className="hdr-logo" src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados"
+              style={{ height:26, display:"block", filter:"brightness(0) invert(1)", opacity:0.95, flexShrink:0 }} />
+            <span className="hdr-sys" aria-hidden="true" style={{ width:1, height:26, background:"rgba(255,255,255,0.18)", flexShrink:0 }} />
+            <span className="hdr-sys" style={{ display:"flex", flexDirection:"column", lineHeight:1.1, minWidth:0 }}>
+              <span style={{ fontSize:14, fontWeight:700, color:"#fff", letterSpacing:0.2, whiteSpace:"nowrap" }}>MCS Prazos</span>
+              <span style={{ fontSize:9.5, fontWeight:600, color:"#F5C518", letterSpacing:1.4, textTransform:"uppercase", whiteSpace:"nowrap" }}>Gestão processual</span>
+            </span>
+            <h1 style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0 0 0 0)", margin:-1 }}>MCS Prazos — Martins, Corrêa da Silva Advogados</h1>
           </div>
-          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            <button onClick={() => setModo(modo==="light"?"dark":"light")}
-              style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, padding:8, color:"#fff", cursor:"pointer", display:"flex" }}
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
+            <button className="hdr-btn" onClick={() => setModo(modo==="light"?"dark":"light")}
               title="Alternar tema" aria-label={modo==="light"?"Ativar tema escuro":"Ativar tema claro"}>
               <Icon name={modo==="light"?"moon":"sun"} size={18} color="#fff" />
             </button>
-            <button onClick={() => setResumoAberto(true)} aria-label={`Abrir resumo do dia${totalAtencao>0?": "+totalAtencao+" prazos de atenção":""}`} style={{
-              background: totalAtencao>0 ? "#F5C518" : "rgba(255,255,255,0.12)",
-              border:"none", borderRadius:10, padding:8, cursor:"pointer", display:"flex", alignItems:"center", gap:4,
-              color: totalAtencao>0 ? "#1B2A4A" : "#fff", position:"relative",
-            }}>
+            <button className={"hdr-btn" + (totalAtencao>0 ? " alerta" : "")} onClick={() => setResumoAberto(true)}
+              title="Resumo do dia" aria-label={`Abrir resumo do dia${totalAtencao>0?": "+totalAtencao+" prazos de atenção":""}`}>
               <Icon name="bell" size={18} color={totalAtencao>0?"#1B2A4A":"#fff"} />
               {totalAtencao>0 && (
-                <span style={{ position:"absolute", top:-3, right:-3, background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:16, textAlign:"center" }}>{totalAtencao}</span>
+                <span style={{ position:"absolute", top:-6, right:-6, background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:18, lineHeight:"18px", textAlign:"center", boxShadow:"0 0 0 2px #1B2A4A" }}>{totalAtencao}</span>
               )}
             </button>
-            <button onClick={() => setMenuMobile(true)} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, padding:8, color:"#fff", cursor:"pointer", display:"flex", position:"relative" }} aria-label="Abrir menu">
+            <button className="hdr-btn" onClick={() => setMenuMobile(true)} title="Menu" aria-label="Abrir menu">
               <Icon name="menu" size={18} color="#fff" />
               {(() => {
-                if (!ultimoBackup) return <span style={{ position:"absolute", top:4, right:4, width:8, height:8, background:T.danger, borderRadius:"50%", border:"2px solid #fff" }} />;
+                if (!ultimoBackup) return <span style={{ position:"absolute", top:5, right:5, width:8, height:8, background:T.danger, borderRadius:"50%", border:"2px solid #fff" }} />;
                 const dias = Math.floor((Date.now() - new Date(ultimoBackup).getTime()) / 86400000);
-                if (dias >= 7) return <span style={{ position:"absolute", top:4, right:4, width:8, height:8, background:T.danger, borderRadius:"50%", border:"2px solid #fff" }} />;
+                if (dias >= 7) return <span style={{ position:"absolute", top:5, right:5, width:8, height:8, background:T.danger, borderRadius:"50%", border:"2px solid #fff" }} />;
                 return null;
               })()}
             </button>
