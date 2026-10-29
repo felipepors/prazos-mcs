@@ -3509,6 +3509,8 @@ export default function App() {
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                       <StatusBadge status={p.status} modo={modo} />
                       <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
+                      {/* v35: botões comerciais só nos leads (Acompanhar) — prazo processual não tem orçamento nem "data de entrada" */}
+                      {ehLead(p) && (<>
                       <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id); }}
                         title={p.orcamentoEnviado ? "Orçamento enviado — clique para desmarcar" : "Marcar orçamento como enviado"}
                         style={{
@@ -3543,6 +3545,7 @@ export default function App() {
                             style={{ cursor:"pointer", userSelect:"none", lineHeight:1, fontSize:13, fontWeight:700, color:T.textMuted, width:18, height:18, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999 }}>×</span>
                         )}
                       </span>
+                      </>)}
                     </div>
                     {/* Info DJEN compacta */}
                     {isDjen && (djenGatilho || djenMed) && (
