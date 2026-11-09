@@ -38,6 +38,14 @@ const _estado = {};
 let _estadoCarregado = false;
 const _estadoSubs = new Set();
 let _debounceTimer = null;
+// v36 — controle de concorrência entre dispositivos.
+// _versaoServidor: atualizado_em da linha na última leitura/gravação conhecida.
+// _sujo: há edição local ainda não confirmada na nuvem.
+let _versaoServidor = null;
+let _sujo = false;
+let _flushEmCurso = false;
+let _ultimaChecagem = 0;
+function _mesmaVersao(a, b) { return !!a && !!b && (a === b || Date.parse(a) === Date.parse(b)); }
 
 function _normKey(k) { return k.replace(/^mcs\./, ""); }
 function _broadcast(key) { _estadoSubs.forEach(fn => { try { fn(key); } catch(e) {} }); }
@@ -47,16 +55,41 @@ async function _flush() {
   // Sem isso, um dispositivo novo (localStorage vazio → dados de exemplo)
   // podia sobrescrever os dados reais no Supabase nos primeiros segundos.
   if (!_userId || !_sb || !_estadoCarregado) return;
+  if (_flushEmCurso) { _scheduleFlush(); return; }
+  _flushEmCurso = true;
+  const foto = JSON.stringify(_estado);
   try {
-    const payload = { user_id: _userId, dados: _estado };
-    const { error } = await _sb.from("estado_usuario").upsert(payload, { onConflict: "user_id" });
+    let data = null, error = null, conflito = false;
+    if (_versaoServidor) {
+      // v36: grava SÓ se a linha ainda está na versão que este dispositivo leu.
+      // Se outro dispositivo gravou no meio, nenhuma linha casa → conflito.
+      // Antes, o blob inteiro deste dispositivo sobrescrevia o do outro.
+      ({ data, error } = await _sb.from("estado_usuario").update({ dados: JSON.parse(foto) })
+        .eq("user_id", _userId).eq("atualizado_em", _versaoServidor).select("atualizado_em"));
+      if (!error && (!data || data.length === 0)) conflito = true;
+    } else {
+      ({ data, error } = await _sb.from("estado_usuario")
+        .upsert({ user_id: _userId, dados: JSON.parse(foto) }, { onConflict: "user_id" }).select("atualizado_em"));
+    }
     if (error) {
       console.error("Erro ao sincronizar com Supabase:", error);
       notifySyncError("Falha ao sincronizar com a nuvem");
+    } else if (conflito) {
+      // A nuvem vence: recarrega e avisa. Perde-se no máximo a última edição
+      // feita aqui — com aviso —, nunca o que o outro dispositivo gravou.
+      if (_debounceTimer) { clearTimeout(_debounceTimer); _debounceTimer = null; }
+      _sujo = false;
+      await _hidratarDoServidor();
+      notifySyncError("Os dados foram alterados em outro dispositivo. A última alteração feita aqui NÃO foi gravada — confira e refaça.");
+    } else {
+      if (data && data[0] && data[0].atualizado_em) _versaoServidor = data[0].atualizado_em;
+      _sujo = JSON.stringify(_estado) !== foto;
     }
   } catch (e) {
     console.error("Erro ao sincronizar:", e);
     notifySyncError("Falha ao sincronizar com a nuvem");
+  } finally {
+    _flushEmCurso = false;
   }
 }
 
@@ -68,13 +101,15 @@ function _scheduleFlush() {
 async function _hidratarDoServidor() {
   if (!_userId || !_sb) return;
   try {
-    const { data, error } = await _sb.from("estado_usuario").select("dados").eq("user_id", _userId).maybeSingle();
+    const { data, error } = await _sb.from("estado_usuario").select("dados,atualizado_em").eq("user_id", _userId).maybeSingle();
     if (error) {
       console.error("Erro lendo estado:", error);
       notifySyncError("Falha ao ler dados da nuvem");
       return;
     }
     if (data && data.dados && typeof data.dados === "object") {
+      _versaoServidor = data.atualizado_em || null;
+      _sujo = false;
       Object.entries(data.dados).forEach(([k, v]) => {
         _estado[k] = v;
         try { window.localStorage.setItem("mcs." + k, JSON.stringify(v)); } catch(e) {}
@@ -88,6 +123,8 @@ async function _hidratarDoServidor() {
           if (raw !== null) _estado[k] = JSON.parse(raw);
         } catch(e) {}
       });
+      _versaoServidor = null;
+      _sujo = true;
       _scheduleFlush();
     }
     _estadoCarregado = true;
@@ -95,6 +132,25 @@ async function _hidratarDoServidor() {
     console.error("Erro hidratando:", e);
     notifySyncError("Falha ao ler dados da nuvem");
   }
+}
+
+// v36 — ao voltar ao app (aba visível, foco, rede de volta), confere se a nuvem
+// mudou desde a última leitura. O PWA no celular volta do segundo plano sem
+// recarregar a página; sem isto ele seguia com dados de horas ou dias atrás.
+async function _sincronizarAoVoltar() {
+  if (!_userId || !_sb) return;
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  const agora = Date.now();
+  if (agora - _ultimaChecagem < 5000) return;
+  _ultimaChecagem = agora;
+  if (!_estadoCarregado) { await _hidratarDoServidor(); return; }  // leitura inicial falhou: tenta de novo
+  if (_sujo || _debounceTimer || _flushEmCurso) return;              // edição pendente: o flush resolve
+  try {
+    const { data, error } = await _sb.from("estado_usuario").select("atualizado_em").eq("user_id", _userId).maybeSingle();
+    if (error || !data) return;
+    if (_sujo || _debounceTimer || _flushEmCurso) return;
+    if (!_mesmaVersao(data.atualizado_em, _versaoServidor)) await _hidratarDoServidor();
+  } catch (e) { console.error("Checagem de versão falhou:", e); }
 }
 
 let _realtimeChannel = null;
@@ -106,6 +162,10 @@ function _conectarRealtime() {
         payload => {
           const novo = payload && payload.new && payload.new.dados;
           if (!novo || typeof novo !== "object") return;
+          const versao = payload.new.atualizado_em || null;
+          if (_mesmaVersao(versao, _versaoServidor)) return;            // eco da própria gravação
+          if (_sujo || _debounceTimer || _flushEmCurso) return;         // edição pendente: o flush detecta o conflito
+          if (versao) _versaoServidor = versao;
           Object.entries(novo).forEach(([k, v]) => {
             if (JSON.stringify(_estado[k]) !== JSON.stringify(v)) {
               _estado[k] = v;
@@ -166,7 +226,7 @@ function useStorage(fullKey, initial) {
     setValRaw(prev => {
       const computed = (typeof next === "function") ? next(prev) : next;
       _estado[key] = computed;
-      if (_userId && _sb) _scheduleFlush();
+      if (_userId && _sb) { _sujo = true; _scheduleFlush(); }
       return computed;
     });
   };
@@ -207,6 +267,7 @@ function useAuth() {
         if (_userId && _userId !== prev) {
           _desconectarRealtime();
           _estadoCarregado = false;
+          _versaoServidor = null; _sujo = false;
           await _hidratarDoServidor();
           _conectarRealtime();
         } else if (!_userId) {
@@ -215,7 +276,16 @@ function useAuth() {
       });
       sub = data && data.subscription;
     })();
-    return () => { alive = false; try { sub && sub.unsubscribe(); } catch(e) {} };
+    const aoVoltar = () => { _sincronizarAoVoltar(); };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    window.addEventListener("online", aoVoltar);
+    return () => {
+      alive = false; try { sub && sub.unsubscribe(); } catch(e) {}
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", aoVoltar);
+      window.removeEventListener("online", aoVoltar);
+    };
   }, []);
   return { user, loading, ativo: SUPABASE_ATIVO };
 }
@@ -255,6 +325,7 @@ async function fazerLogout() {
   _desconectarRealtime();
   _userId = null;
   _estadoCarregado = false;
+  _versaoServidor = null; _sujo = false;
   return sb.auth.signOut();
 }
 
@@ -692,7 +763,7 @@ function ToastContainer({ toasts, T }) {
   return (
     <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", zIndex:1000, display:"flex", flexDirection:"column", gap:8, alignItems:"center", pointerEvents:"none", maxWidth:"calc(100vw - 32px)" }}>
       {toasts.map(t => {
-        const colors = { success: T.success, info: T.primary, danger: T.danger };
+        const colors = { success: T.success, info: T.primary, danger: T.danger, erro: T.danger };
         return (
           <div key={t.id} style={{
             background:T.card, color:T.text, padding:"10px 18px", borderRadius:12,
@@ -3053,7 +3124,7 @@ export default function App() {
   const toast = (msg, type="info") => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2500);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), type === "erro" ? 7000 : 2500);
   };
   useEffect(() => { _onSyncError = toast; return () => { _onSyncError = null; }; }, []);
 
