@@ -2217,29 +2217,64 @@ function useIntimacoes(userId) {
   const [temMais, setTemMais] = useState(false);
   const SEL_LISTA = "id,numero_processo,numero_processo_digitos,tribunal,nome_orgao,data_disponibilizacao,partes,classificacao,rotulo,trecho,urgencia,requer_conferencia,status,prazo_id,link,observacao";
   const PAG = 50;
-  const carregarMais = async () => {
-    const sb = await initSupabase();
-    if (!sb || !userId) return;
-    const ofs = items.length;
-    const { data, error } = await sb.from("intimacoes_oab").select(SEL_LISTA)
+  // v37 — as NOVO vêm TODAS, sempre; as demais (lidas/tratadas/ignoradas) paginam
+  // de 50 em 50. Antes a lista trazia as 50 mais recentes de qualquer status e
+  // filtrava no navegador: NOVO mais antiga ficava fora da tela até "Carregar mais".
+  // Paginação por cursor (data, id), não por offset: mudar o status de uma linha
+  // desloca offsets e faria pular intimações.
+  const cursorRef = useRef(null);
+  const carregandoRef = useRef(false);
+  const ordenar = (arr) => [...arr].sort((x, y) =>
+    x.data_disponibilizacao === y.data_disponibilizacao
+      ? (x.id < y.id ? 1 : -1)
+      : (x.data_disponibilizacao < y.data_disponibilizacao ? 1 : -1));
+  const paginaOutras = (sb, cursor) => {
+    let q = sb.from("intimacoes_oab").select(SEL_LISTA).neq("status", "NOVO")
       .order("data_disponibilizacao", { ascending: false })
       .order("id", { ascending: false })
-      .range(ofs, ofs + PAG - 1);
-    if (error || !data) return;
-    setItems((prev) => { const ids = new Set(prev.map((x) => x.id)); return [...prev, ...data.filter((d) => !ids.has(d.id))]; });
-    setTemMais(data.length === PAG);
+      .limit(PAG);
+    if (cursor) q = q.or(`data_disponibilizacao.lt.${cursor.d},and(data_disponibilizacao.eq.${cursor.d},id.lt.${cursor.id})`);
+    return q;
+  };
+  const avancarCursor = (data) => {
+    const ult = data[data.length - 1];
+    if (ult) cursorRef.current = { d: ult.data_disponibilizacao, id: ult.id };
+  };
+  // todas=true: segue buscando até acabar (usado pela busca textual).
+  const carregarMais = async (todas = false) => {
+    const sb = await initSupabase();
+    if (!sb || !userId || carregandoRef.current) return;
+    carregandoRef.current = true;
+    try {
+      for (let volta = 0; volta < 40; volta++) {
+        const { data, error } = await paginaOutras(sb, cursorRef.current);
+        if (error || !data) return;
+        avancarCursor(data);
+        setItems((prev) => { const ids = new Set(prev.map((x) => x.id)); return ordenar([...prev, ...data.filter((d) => !ids.has(d.id))]); });
+        const mais = data.length === PAG;
+        setTemMais(mais);
+        if (!todas || !mais) return;
+      }
+    } finally { carregandoRef.current = false; }
   };
   const carregar = async () => {
     setLoading(true);
     const sb = await initSupabase();
     if (!sb || !userId) { setLoading(false); return; }
-    const { data, error } = await sb
-      .from("intimacoes_oab")
-      .select(SEL_LISTA)
-      .order("data_disponibilizacao", { ascending: false })
-      .order("id", { ascending: false })
-      .range(0, PAG - 1);
-    if (!error) { setItems(data || []); setTemMais((data || []).length === PAG); }
+    cursorRef.current = null;
+    const [rNovo, rOutras] = await Promise.all([
+      sb.from("intimacoes_oab").select(SEL_LISTA).eq("status", "NOVO")
+        .order("data_disponibilizacao", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1000),
+      paginaOutras(sb, null),
+    ]);
+    if (!rNovo.error && !rOutras.error) {
+      const outras = rOutras.data || [];
+      avancarCursor(outras);
+      setItems(ordenar([...(rNovo.data || []), ...outras]));
+      setTemMais(outras.length === PAG);
+    }
     const { data: cl } = await sb
       .from("intimacoes_clientes")
       .select("numero_processo,cliente");
@@ -2427,6 +2462,12 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
     return [...g.entries()];
   }, [filtradas]);
 
+  // v37 — a busca filtra o que está carregado; com busca ativa, traz o restante.
+  useEffect(() => {
+    if (busca.trim().length >= 3 && temMais) carregarMais(true);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [busca, temMais]);
+
   const toggleStatus = (s) => setFStatus((prev) => {
     const n = new Set(prev);
     if (n.has(s)) n.delete(s); else n.add(s);
@@ -2571,9 +2612,9 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
 
       {temMais && !loading && (
         <div style={{ textAlign: "center", margin: "6px 0 14px" }}>
-          <button onClick={() => carregarMais()}
+          <button onClick={() => carregarMais(false)}
             style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "6px 16px", fontSize: 12, cursor: "pointer" }}>
-            ↓ Carregar mais 50
+            ↓ Carregar mais 50 já lidas/tratadas
           </button>
         </div>
       )}
