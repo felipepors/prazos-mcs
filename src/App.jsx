@@ -443,6 +443,9 @@ const Icon = ({ name, size=18, color="currentColor" }) => {
     mail:     <><rect x="2" y="4" width="20" height="16" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M22 6l-10 7L2 6" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></>,
     chat:     <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/>,
     filter:   <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/>,
+    download: <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    upload:   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    logout:   <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display:"inline-block", flexShrink:0, verticalAlign:"middle" }}>
@@ -1799,13 +1802,13 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
             <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Adicionar processo para acompanhamento</div>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2a passada diaria.</div>
+                <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2ª passada diária.</div>
               </div>
-              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"none", border:"none", color:T.textMuted, fontSize:22, cursor:"pointer", padding:0 }}>x</button>
+              <button onClick={() => setModalNovoProcesso(false)} style={{ background:"none", border:"none", color:T.textMuted, fontSize:22, cursor:"pointer", padding:0 }}>×</button>
             </div>
             <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
               <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Numero do processo *</span>
+                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Número do processo *</span>
                 <input autoFocus value={formNovoProcesso.numero_processo}
                   onChange={e => setFormNovoProcesso(f => ({ ...f, numero_processo: mascararProcesso(e.target.value) }))}
                   placeholder="0000000-00.0000.0.00.0000"
@@ -1820,7 +1823,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                 </select>
               </label>
               <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observacao (opcional)</span>
+                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observação (opcional)</span>
                 <textarea value={formNovoProcesso.observacao} onChange={e => setFormNovoProcesso(f => ({ ...f, observacao: e.target.value }))}
                   rows={2} placeholder="Ex: Cliente atual..."
                   style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box", resize:"vertical" }} />
@@ -2310,7 +2313,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
   const buscarAgora = async () => {
     const sb = await initSupabase();
     if (!sb) return;
-    if (de && ate && de > ate) { toast && toast("A data inicial e posterior a final.", "danger"); return; }
+    if (de && ate && de > ate) { toast && toast("A data inicial é posterior à final.", "danger"); return; }
     const body = { origem: "manual" };
     if (de) body.data_inicio = de;
     if (ate) body.data_fim = ate;
@@ -2413,19 +2416,22 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
     setDetalhe(null);
   };
 
+  // v38 — "Lida" (= cumprida, a ação de quase sempre) é o botão principal;
+  // "Tratada" e "Ignorar" ficam discretos. Ligado, qualquer um fica dourado.
   const btnStatus = (i, alvo, label) => {
     const on = i.status === alvo;
+    const principal = alvo === "LIDO";
     return (
       <button key={alvo} disabled={salvando}
         onClick={(e) => { e.stopPropagation(); gravar(i.id, { status: on ? "NOVO" : alvo }); }}
         style={{
-          border: `1px solid ${on ? "#F5C518" : T.border}`,
-          background: on ? "#FFF8E1" : T.card,
-          color: on ? "#7A5B00" : T.textMuted,
-          borderRadius: 8, padding: "3px 9px", fontSize: 11,
-          fontWeight: on ? 700 : 500, cursor: salvando ? "wait" : "pointer",
+          border: `1px solid ${on ? "#F5C518" : principal ? T.primary : "transparent"}`,
+          background: on ? "#FFF8E1" : "transparent",
+          color: on ? "#7A5B00" : principal ? T.primary : T.textMuted,
+          borderRadius: 8, padding: principal ? "7px 16px" : "7px 10px", fontSize: 13, minHeight: 34,
+          fontWeight: on || principal ? 700 : 500, cursor: salvando ? "wait" : "pointer",
         }}>
-        {label}
+        {principal ? (on ? "✓ " : "") + label : label}
       </button>
     );
   };
@@ -2518,10 +2524,10 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
           {buscando ? "Buscando…" : "🔎 Buscar agora"}
         </button>
         <span style={{ fontSize: 11, color: T.textMuted }}>De</span>
-        <input type="date" value={de} onChange={(e) => setDe(e.target.value)} disabled={buscando}
+        <input type="date" className={de ? "" : "data-vazia"} value={de} onChange={(e) => setDe(e.target.value)} disabled={buscando}
           style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
         <span style={{ fontSize: 11, color: T.textMuted }}>até</span>
-        <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} disabled={buscando}
+        <input type="date" className={ate ? "" : "data-vazia"} value={ate} onChange={(e) => setAte(e.target.value)} disabled={buscando}
           style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
         {(de || ate) && (
           <button onClick={() => { setDe(""); setAte(""); }} disabled={buscando}
@@ -2534,22 +2540,25 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
         </span>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10, alignItems: "center" }}>
         {Object.keys(INTIM_STATUS_LABEL).map((s) => (
           <button key={s} onClick={() => toggleStatus(s)} style={chip(fStatus.has(s))}>
             {INTIM_STATUS_LABEL[s]}
           </button>
         ))}
+        <span aria-hidden="true" style={{ width: 1, height: 20, background: T.borderStrong, margin: "0 4px" }} />
         <select value={fTrib} onChange={(e) => setFTrib(e.target.value)}
           style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
           <option value="">Todos os tribunais</option>
           {tribunais.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <span aria-hidden="true" style={{ width: 1, height: 20, background: T.borderStrong, margin: "0 4px" }} />
         {["alta", "media", "baixa"].map((u) => (
           <button key={u} onClick={() => setFUrg(fUrg === u ? "" : u)} style={chip(fUrg === u)}>
             {u === "alta" ? "Urgente" : u === "media" ? "Média" : "Baixa"}
           </button>
         ))}
+        <span aria-hidden="true" style={{ width: 1, height: 20, background: T.borderStrong, margin: "0 4px" }} />
         <button onClick={() => setSoConferir(!soConferir)} style={chip(soConferir)}>⚠ Conferir</button>
         <input value={busca} onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar processo, parte ou texto…"
@@ -2594,12 +2603,12 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
                     : (i.partes || "—")}
                 </div>
                 {i.nome_orgao && <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{i.nome_orgao}</div>}
-                {i.trecho && (
+                {i.trecho && !(i.classificacao === "SIGILOSO" || /^processo sigiloso/i.test(i.trecho)) && (
                   <div style={{ fontSize: 12, color: T.textSoft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {i.trecho}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
                   {btnStatus(i, "LIDO", "Lida")}
                   {btnStatus(i, "TRATADO", "Tratada")}
                   {btnStatus(i, "IGNORADO", "Ignorar")}
@@ -3008,9 +3017,9 @@ function PainelAlvaras({ T, toast, user }) {
 }
 
 const SLOTS_KIT = [
-  { id:"procuracao", label:"Procuracao",                    hint:"Outorga de poderes" },
-  { id:"declaracao", label:"Declaracao de hipossuficiencia", hint:"AJG" },
-  { id:"contrato",   label:"Contrato de honorarios",         hint:"Prestacao de servicos" },
+  { id:"procuracao", label:"Procuração",                    hint:"Outorga de poderes" },
+  { id:"declaracao", label:"Declaração de hipossuficiência", hint:"AJG" },
+  { id:"contrato",   label:"Contrato de honorários",         hint:"Prestação de serviços" },
 ];
 const fileToB64 = (file) => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(file); });
 
@@ -3029,14 +3038,14 @@ function KitContratacaoModal({ T, INP, LBL, BTN_PRIMARY, BTN_GHOST, kitPrazo, ki
     <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,background:"rgba(0,0,0,0.5)"}} onClick={()=>{if(kitStatus!=="sending"){onFechar();}}}>
       <div style={{background:T.card,borderRadius:16,padding:"20px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",border:"1px solid "+T.border}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratacao</h2>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:T.text}}>Kit de contratação</h2>
           {kitStatus!=="sending" && <button onClick={onFechar} style={{background:"transparent",border:"none",padding:6,cursor:"pointer",color:T.textSoft,display:"flex"}}><Icon name="close" size={18} color={T.textSoft}/></button>}
         </div>
         {kitStatus==="done" ? (
           <div style={{textAlign:"center",padding:"20px 0"}}>
             <p style={{fontWeight:700,color:T.text,fontSize:32,marginBottom:4}}>&#x2713;</p>
             <p style={{fontWeight:700,color:T.text,marginBottom:4}}>Link gerado!</p>
-            <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuracao + Declaracao + Contrato</p>
+            <p style={{fontSize:12,color:T.textSoft,marginBottom:16}}>Procuração + Declaração + Contrato</p>
             <div style={{background:T.cardAlt,borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left"}}>
               <span style={{fontSize:12,color:"#3B82F6",fontFamily:"monospace",wordBreak:"break-all"}}>{kitSignUrl}</span>
             </div>
@@ -3067,7 +3076,7 @@ function KitContratacaoModal({ T, INP, LBL, BTN_PRIMARY, BTN_GHOST, kitPrazo, ki
                       <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
                       <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
                     </div>
-                    {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>x</button>}
+                    {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>×</button>}
                   </div>
                 );
               })}
@@ -3118,7 +3127,7 @@ export default function App() {
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
   const [filtroTarefa, setFiltroTarefa] = useState("todas");
-  const [aba, setAba]                   = useState("lista");
+  const [aba, setAba]                   = useState("intimacoes"); // v38: abre na triagem
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [mostrarLeads, setMostrarLeads] = useState(false); // "Acompanhar" ocultos por padrão
   const [novasIntim, setNovasIntim]     = useState(null); // contador de intimações NOVO (spec v2 §6)
@@ -3169,8 +3178,20 @@ export default function App() {
   };
   useEffect(() => { _onSyncError = toast; return () => { _onSyncError = null; }; }, []);
 
+  // v38 — o resumo só abre sozinho quando há prazo vencido ou urgente. Decide uma
+  // única vez por sessão, 1,5 s após o login (tempo de os dados chegarem da nuvem).
   const shown = useRef(false);
-  useEffect(() => { if (!shown.current) { shown.current = true; setResumoAberto(true); } }, []);
+  const resumoRef = useRef(null);
+  useEffect(() => {
+    if (shown.current || !user?.id) return;
+    const t = setTimeout(() => {
+      if (shown.current) return;
+      shown.current = true;
+      const r = resumoRef.current;
+      if (r && (r.vencidos.length + r.urgentes.length) > 0) setResumoAberto(true);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [user?.id]);
   useEffect(() => { setFeriadosGlobal(feriados); }, [feriados]);
 
   // Semeia feriados novos (2027 + recesso forense) em contas que já tinham
@@ -3201,6 +3222,7 @@ export default function App() {
       proximos: srt(ativos.filter(p => p.status==="proximo")),
     };
   }, [prazosComStatus]);
+  resumoRef.current = resumoData;
 
   const lista = useMemo(() => {
     const prOrd = { alta:0, media:1, baixa:2 };
@@ -3387,6 +3409,8 @@ export default function App() {
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
         input, select, textarea { font-family: inherit; }
+        input.data-vazia::-webkit-datetime-edit { color: transparent; }
+        input.data-vazia:focus::-webkit-datetime-edit { color: inherit; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
         .hdr-btn { width:38px; height:38px; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
           background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#fff; cursor:pointer;
@@ -3670,7 +3694,7 @@ export default function App() {
                     {/* Toggle Monitorar no DJEN — aparece para qualquer prazo captado do DJEN */}
                     {isDjen && (
                       <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6 }}>
-                        <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}
+                        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"6px 8px 6px 0", minHeight:32 }}
                           onClick={e => e.stopPropagation()}>
                           <input type="checkbox"
                             checked={!!p.djenAcompanhar}
@@ -3689,8 +3713,8 @@ export default function App() {
                               }
                               toast(novoVal ? "Monitoramento ativado" : "Monitoramento desativado", "success");
                             }}
-                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:13, height:13 }} />
-                          <span style={{ fontSize:10, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
+                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:18, height:18 }} />
+                          <span style={{ fontSize:12, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
                         </label>
                       </div>
                     )}
@@ -3787,16 +3811,16 @@ export default function App() {
         <div style={{ padding:"16px 16px 80px" }}>
           <div style={{ marginBottom:14 }}>
             <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text }}>Assinaturas</h2>
-            <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>Kit de contratacao via ZapSign: Procuracao + Declaracao + Contrato em 1 link</div>
+            <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>Kit de contratação via ZapSign: Procuração + Declaração + Contrato em 1 link</div>
           </div>
           <button onClick={() => { setKitPrazo({}); setKitArqs({}); setKitStatus("idle"); setKitSignUrl(""); setKitModal(true); }}
             style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"12px 20px", borderRadius:12, border:"none", background:"#F5C518", color:"#1B2A4A", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px #F5C51855" }}>
-            + Gerar kit de contratacao
+            + Gerar kit de contratação
           </button>
         </div>
       )}
 
-      {aba !== "alvaras" && aba !== "assinaturas" && (
+      {(aba === "lista" || aba === "tarefas" || aba === "calendario") && (
       <button onClick={() => aba==="tarefas" ? (setTarefaForm({titulo:"",descricao:"",prioridade:"media",responsavel:"Felipe",concluida:false,prazoLimite:""}), setTarefaEditId(null), setTarefaModal(true)) : openNovo()}
         aria-label={aba==="tarefas"?"Nova tarefa":"Novo prazo"}
         style={{
@@ -3825,19 +3849,20 @@ export default function App() {
           <div style={{ padding:8 }}>
             {[
               { ico:"mic",      lbl:"Comando rápido",   fn:() => { setCmdTexto(""); setCmdParsed(null); setCmdModal(true); setMenuMobile(false); } },
+              { ico:"bell",     lbl:"Resumo do dia",    fn:() => { setResumoAberto(true); setMenuMobile(false); } },
               { ico:"tag",      lbl:"Tipos de prazo",   fn:() => { setGerirTipos(true); setMenuMobile(false); } },
               { ico:"user",     lbl:"Clientes",         fn:() => { setClienteModal(true); setMenuMobile(false); } },
               { ico:"flag",     lbl:"Feriados",         fn:() => { setFeriadoModal(true); setMenuMobile(false); } },
-              { ico:"calendar", lbl:"Backup / Restore", fn:() => { setBackupModal(true); setMenuMobile(false); } },
-              ...(authAtivo && user ? [{ ico:"close", lbl:"Sair (" + (user.email||"") + ")", fn:() => { fazerLogout(); setMenuMobile(false); } }] : []),
-              { ico:"bell",     lbl:"Resumo do dia",    fn:() => { setResumoAberto(true); setMenuMobile(false); } },
               { ico:"printer",  lbl:"Exportar lista",   fn:() => { setExportModal(gerarDadosExport(lista)); setMenuMobile(false); } },
-            ].map(({ ico, lbl, fn }) => (
+              { ico:"download", lbl:"Backup / Restore", fn:() => { setBackupModal(true); setMenuMobile(false); } },
+              ...(authAtivo && user ? [{ ico:"logout", lbl:"Sair (" + (user.email||"") + ")", sep:true, fn:() => { fazerLogout(); setMenuMobile(false); } }] : []),
+            ].map(({ ico, lbl, fn, sep }) => (
               <button key={lbl} onClick={fn} style={{
                 width:"100%", background:"transparent", border:"none",
                 padding:"12px 14px", cursor:"pointer", textAlign:"left",
                 display:"flex", alignItems:"center", gap:12, fontSize:14, color:T.text,
-                borderRadius:10,
+                borderRadius: sep ? 0 : 10,
+                ...(sep ? { borderTop:`1px solid ${T.border}`, marginTop:8, paddingTop:16 } : {}),
               }}>
                 <Icon name={ico} size={18} color={T.textSoft} />{lbl}
               </button>
@@ -4254,7 +4279,7 @@ export default function App() {
                 setUltimoBackup(new Date().toISOString());
                 toast("Backup baixado","success");
               }} style={{ ...BTN_PRIMARY, padding:"12px", width:"100%", justifyContent:"center", fontSize:14 }}>
-                <Icon name="printer" size={16} color="#fff" /> Baixar backup (JSON)
+                <Icon name="download" size={16} color="#fff" /> Baixar backup (JSON)
               </button>
 
               {/* Botão Importar */}
@@ -4280,7 +4305,7 @@ export default function App() {
                 }} />
               <button onClick={() => fileInputRef.current?.click()}
                 style={{ ...BTN_GHOST, padding:"12px", width:"100%", justifyContent:"center", display:"flex", alignItems:"center", gap:6, fontSize:14 }}>
-                <Icon name="calendar" size={16} color={T.textSoft} /> Restaurar de arquivo
+                <Icon name="upload" size={16} color={T.textSoft} /> Restaurar de arquivo
               </button>
 
               <div style={{ fontSize:11, color:T.textMuted, lineHeight:1.6, padding:"10px 12px", background:T.cardAlt, borderRadius:8 }}>
