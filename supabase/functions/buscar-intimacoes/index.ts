@@ -1,6 +1,16 @@
 // ============================================================
-// FASE 1 (v11) — Edge Function: buscar-intimacoes
+// FASE 1 (v12) — Edge Function: buscar-intimacoes
 // Porta server-side da lógica COMPROVADA do monitor_intimacoes.py.
+// v12: AUTENTICAÇÃO. O verify_jwt do gateway aceita a chave pública, então
+//      qualquer pessoa com ela chamava a função com todas as opções. Agora:
+//      - usuário logado (JWT válido) ou service role → tudo liberado;
+//      - qualquer outro chamador (é o caso do pg_cron, que usa a chave
+//        pública) → MODO RESTRITO: só a coleta padrão de 7 dias; as opções
+//        do corpo (teste_email, teste_alerta_sem_novas, sem_email, período,
+//        origem) são ignoradas; no máximo uma rodada a cada 60 minutos; e o
+//        alerta de "dia útil sem novas" só sai na janela do cron (11–13h UTC).
+//      Sem segredo compartilhado de propósito: o cron nunca fica trancado
+//      do lado de fora por erro de configuração.
 // v11: ALERTA "DIA ÚTIL SEM INTIMAÇÃO NOVA". A regra anterior olhava o
 //      TOTAL da janela de 7 dias, que nunca zera — por isso não disparou em
 //      06–08/10/2026, quando o índice da API Comunica devolvia sucesso com
@@ -36,6 +46,7 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 const COMUNICA_API = "https://comunicaapi.pje.jus.br/api/v1/comunicacao";
 const ITENS_POR_PAGINA = 100;
 const DIAS_RETROATIVOS = 7;
+const INTERVALO_MIN_RESTRITO_MS = 60 * 60 * 1000; // v12: modo restrito, 1 rodada/hora
 const MAX_TENTATIVAS = 5;
 const MAX_PAGINAS = 30;
 const BACKOFF_INICIAL = 10_000;
@@ -656,10 +667,29 @@ const respostaJSON = (obj: unknown, status = 200) =>
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
+// v12 — quem pode usar todas as opções: usuário logado (JWT validado no Auth)
+// ou a service role (painel do Supabase). A chave pública NÃO é privilégio.
+async function chamadorPrivilegiado(req: Request): Promise<boolean> {
+  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!jwt) return false;
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (service && jwt === service) return true;
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${jwt}`, apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "" },
+      signal: AbortSignal.timeout(8000),
+    });
+    return r.ok;
+  } catch {
+    return false; // na dúvida, modo restrito (a coleta padrão roda do mesmo jeito)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
   }
+  const privilegiado = await chamadorPrivilegiado(req);
 
   const obrigatorios = ["OAB_NUMERO", "OAB_UF", "ADVOGADO_NOME"];
   const faltando = obrigatorios.filter((k) => !Deno.env.get(k));
@@ -695,6 +725,22 @@ Deno.serve(async (req) => {
     teste_alerta_sem_novas?: boolean;
   } = {};
   try { corpo = await req.json(); } catch { /* padrão */ }
+  if (!privilegiado) {
+    // v12 — modo restrito: ignora TODAS as opções do corpo.
+    corpo = {};
+    // Intervalo mínimo entre rodadas não autenticadas. Se a consulta falhar,
+    // segue em frente: o cron nunca pode ser barrado por este controle.
+    const desde = new Date(Date.now() - INTERVALO_MIN_RESTRITO_MS).toISOString();
+    const { data: recentes, error: eRec } = await supabase
+      .from("execucoes_coleta").select("id")
+      .eq("origem", "cron").gte("iniciada_em", desde).limit(1);
+    if (!eRec && recentes && recentes.length > 0) {
+      return respostaJSON(
+        { ok: false, erro: "Coleta automática já executada há menos de 60 minutos" },
+        429,
+      );
+    }
+  }
   const origemExec = corpo.origem === "manual" ? "manual" : "cron";
 
   // Teste isolado do canal de e-mail (não coleta nada)
@@ -867,7 +913,10 @@ Deno.serve(async (req) => {
 
   // v11: zero NOVAS do DJEN (não o total da janela, que nunca zera)
   const novasDjen = novasRows.filter((r) => r.tribunal !== "DEOAB").length;
-  const semNovasDiaUtil = deveAlertarSemNovas({
+  // v12 — fora da janela do cron (11–13h UTC), rodada não autenticada não alerta.
+  const horaUTC = hoje.getUTCHours();
+  const naJanelaDoCron = privilegiado || (horaUTC >= 11 && horaUTC <= 13);
+  const semNovasDiaUtil = naJanelaDoCron && deveAlertarSemNovas({
     semErros: erros.length === 0,
     origem: origemExec,
     buscaCustomizada,
