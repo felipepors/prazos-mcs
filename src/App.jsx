@@ -443,6 +443,9 @@ const Icon = ({ name, size=18, color="currentColor" }) => {
     mail:     <><rect x="2" y="4" width="20" height="16" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M22 6l-10 7L2 6" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></>,
     chat:     <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/>,
     filter:   <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/>,
+    download: <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    upload:   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    logout:   <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display:"inline-block", flexShrink:0, verticalAlign:"middle" }}>
@@ -2425,7 +2428,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
           border: `1px solid ${on ? "#F5C518" : principal ? T.primary : "transparent"}`,
           background: on ? "#FFF8E1" : "transparent",
           color: on ? "#7A5B00" : principal ? T.primary : T.textMuted,
-          borderRadius: 8, padding: principal ? "5px 14px" : "5px 8px", fontSize: 12,
+          borderRadius: 8, padding: principal ? "7px 16px" : "7px 10px", fontSize: 13, minHeight: 34,
           fontWeight: on || principal ? 700 : 500, cursor: salvando ? "wait" : "pointer",
         }}>
         {principal ? (on ? "✓ " : "") + label : label}
@@ -3124,7 +3127,7 @@ export default function App() {
   const [filtroPrioridade, setFiltroPrioridade] = useState("todas");
   const [filtroResp, setFiltroResp]     = useState("todos");
   const [filtroTarefa, setFiltroTarefa] = useState("todas");
-  const [aba, setAba]                   = useState("lista");
+  const [aba, setAba]                   = useState("intimacoes"); // v38: abre na triagem
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [mostrarLeads, setMostrarLeads] = useState(false); // "Acompanhar" ocultos por padrão
   const [novasIntim, setNovasIntim]     = useState(null); // contador de intimações NOVO (spec v2 §6)
@@ -3175,8 +3178,20 @@ export default function App() {
   };
   useEffect(() => { _onSyncError = toast; return () => { _onSyncError = null; }; }, []);
 
+  // v38 — o resumo só abre sozinho quando há prazo vencido ou urgente. Decide uma
+  // única vez por sessão, 1,5 s após o login (tempo de os dados chegarem da nuvem).
   const shown = useRef(false);
-  useEffect(() => { if (!shown.current) { shown.current = true; setResumoAberto(true); } }, []);
+  const resumoRef = useRef(null);
+  useEffect(() => {
+    if (shown.current || !user?.id) return;
+    const t = setTimeout(() => {
+      if (shown.current) return;
+      shown.current = true;
+      const r = resumoRef.current;
+      if (r && (r.vencidos.length + r.urgentes.length) > 0) setResumoAberto(true);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [user?.id]);
   useEffect(() => { setFeriadosGlobal(feriados); }, [feriados]);
 
   // Semeia feriados novos (2027 + recesso forense) em contas que já tinham
@@ -3207,6 +3222,7 @@ export default function App() {
       proximos: srt(ativos.filter(p => p.status==="proximo")),
     };
   }, [prazosComStatus]);
+  resumoRef.current = resumoData;
 
   const lista = useMemo(() => {
     const prOrd = { alta:0, media:1, baixa:2 };
@@ -3678,7 +3694,7 @@ export default function App() {
                     {/* Toggle Monitorar no DJEN — aparece para qualquer prazo captado do DJEN */}
                     {isDjen && (
                       <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6 }}>
-                        <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer" }}
+                        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"6px 8px 6px 0", minHeight:32 }}
                           onClick={e => e.stopPropagation()}>
                           <input type="checkbox"
                             checked={!!p.djenAcompanhar}
@@ -3697,8 +3713,8 @@ export default function App() {
                               }
                               toast(novoVal ? "Monitoramento ativado" : "Monitoramento desativado", "success");
                             }}
-                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:13, height:13 }} />
-                          <span style={{ fontSize:10, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
+                            style={{ accentColor:"#5c6b3a", cursor:"pointer", width:18, height:18 }} />
+                          <span style={{ fontSize:12, color:"#5c6b3a", fontWeight:600 }}>Monitorar no DJEN</span>
                         </label>
                       </div>
                     )}
@@ -3833,19 +3849,20 @@ export default function App() {
           <div style={{ padding:8 }}>
             {[
               { ico:"mic",      lbl:"Comando rápido",   fn:() => { setCmdTexto(""); setCmdParsed(null); setCmdModal(true); setMenuMobile(false); } },
+              { ico:"bell",     lbl:"Resumo do dia",    fn:() => { setResumoAberto(true); setMenuMobile(false); } },
               { ico:"tag",      lbl:"Tipos de prazo",   fn:() => { setGerirTipos(true); setMenuMobile(false); } },
               { ico:"user",     lbl:"Clientes",         fn:() => { setClienteModal(true); setMenuMobile(false); } },
               { ico:"flag",     lbl:"Feriados",         fn:() => { setFeriadoModal(true); setMenuMobile(false); } },
-              { ico:"calendar", lbl:"Backup / Restore", fn:() => { setBackupModal(true); setMenuMobile(false); } },
-              ...(authAtivo && user ? [{ ico:"close", lbl:"Sair (" + (user.email||"") + ")", fn:() => { fazerLogout(); setMenuMobile(false); } }] : []),
-              { ico:"bell",     lbl:"Resumo do dia",    fn:() => { setResumoAberto(true); setMenuMobile(false); } },
               { ico:"printer",  lbl:"Exportar lista",   fn:() => { setExportModal(gerarDadosExport(lista)); setMenuMobile(false); } },
-            ].map(({ ico, lbl, fn }) => (
+              { ico:"download", lbl:"Backup / Restore", fn:() => { setBackupModal(true); setMenuMobile(false); } },
+              ...(authAtivo && user ? [{ ico:"logout", lbl:"Sair (" + (user.email||"") + ")", sep:true, fn:() => { fazerLogout(); setMenuMobile(false); } }] : []),
+            ].map(({ ico, lbl, fn, sep }) => (
               <button key={lbl} onClick={fn} style={{
                 width:"100%", background:"transparent", border:"none",
                 padding:"12px 14px", cursor:"pointer", textAlign:"left",
                 display:"flex", alignItems:"center", gap:12, fontSize:14, color:T.text,
-                borderRadius:10,
+                borderRadius: sep ? 0 : 10,
+                ...(sep ? { borderTop:`1px solid ${T.border}`, marginTop:8, paddingTop:16 } : {}),
               }}>
                 <Icon name={ico} size={18} color={T.textSoft} />{lbl}
               </button>
@@ -4262,7 +4279,7 @@ export default function App() {
                 setUltimoBackup(new Date().toISOString());
                 toast("Backup baixado","success");
               }} style={{ ...BTN_PRIMARY, padding:"12px", width:"100%", justifyContent:"center", fontSize:14 }}>
-                <Icon name="printer" size={16} color="#fff" /> Baixar backup (JSON)
+                <Icon name="download" size={16} color="#fff" /> Baixar backup (JSON)
               </button>
 
               {/* Botão Importar */}
@@ -4288,7 +4305,7 @@ export default function App() {
                 }} />
               <button onClick={() => fileInputRef.current?.click()}
                 style={{ ...BTN_GHOST, padding:"12px", width:"100%", justifyContent:"center", display:"flex", alignItems:"center", gap:6, fontSize:14 }}>
-                <Icon name="calendar" size={16} color={T.textSoft} /> Restaurar de arquivo
+                <Icon name="upload" size={16} color={T.textSoft} /> Restaurar de arquivo
               </button>
 
               <div style={{ fontSize:11, color:T.textMuted, lineHeight:1.6, padding:"10px 12px", background:T.cardAlt, borderRadius:8 }}>
