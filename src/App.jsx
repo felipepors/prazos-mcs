@@ -18,7 +18,7 @@ async function initSupabase() {
   if (_sbReady) return _sbReady;
   _sbReady = (async () => {
     try {
-      const mod = await import("https://esm.sh/@supabase/supabase-js@2");
+      const mod = await import("@supabase/supabase-js");
       _sb = mod.createClient(SUPABASE_URL, SUPABASE_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, storageKey: "mcs.sb.auth" }
       });
