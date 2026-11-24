@@ -903,7 +903,7 @@ function Calendario({ prazos, onEdit, onNovoData, feriadosNomes, T, modo, onToas
             const isWeekend = dow === 0 || dow === 6;
             const feriadoNome = feriadosNomes && feriadosNomes[ds];
             return (
-              <div key={ds} onClick={() => setDiaAtivo(isAtivo ? null : ds)}
+              <div key={ds} className="cal-cell" onClick={() => setDiaAtivo(isAtivo ? null : ds)}
                 title={feriadoNome ? feriadoNome : ""}
                 style={{
                   borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`,
@@ -921,7 +921,25 @@ function Calendario({ prazos, onEdit, onNovoData, feriadosNomes, T, modo, onToas
                   }}>{dNum}</span>
                 </div>
                 {qtd > 0 && (
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:2, justifyContent:"center" }}>
+                  <div className="cal-chips" style={{ minWidth:0 }}>
+                    {(porDia[ds]||[]).slice(0,2).map((p,j) => {
+                      const cfg = STATUS_CFG[p.status][modo];
+                      const rot = p.parte ? `${p.tipo} · ${p.parte}` : p.tipo;
+                      return (
+                        <div key={j} title={`${rot}${p.processo ? " — " + p.processo : ""}`}
+                          style={{ fontSize:11, lineHeight:"15px", padding:"1px 5px", marginBottom:2, borderRadius:4,
+                            background:cfg.bg, color:cfg.text, borderLeft:`3px solid ${cfg.c}`,
+                            whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                            textDecoration: p.status==="concluido" ? "line-through" : "none" }}>
+                          {rot}
+                        </div>
+                      );
+                    })}
+                    {qtd > 2 && <div style={{ fontSize:11, color:T.textMuted, paddingLeft:4 }}>+{qtd-2} mais</div>}
+                  </div>
+                )}
+                {qtd > 0 && (
+                  <div className="cal-dots" style={{ display:"flex", flexWrap:"wrap", gap:2, justifyContent:"center" }}>
                     {(porDia[ds]||[]).slice(0,3).map((p,j) => <div key={j} style={{ width:6, height:6, borderRadius:"50%", background:STATUS_CFG[p.status][modo].c }} />)}
                     {qtd > 3 && <span style={{ fontSize:9, color:T.textMuted }}>+{qtd-3}</span>}
                   </div>
@@ -3421,6 +3439,12 @@ export default function App() {
         .hdr-btn.alerta:hover { background:#ffd23f; border-color:#ffd23f; }
         .hdr-nome { font-family:Georgia,'Gelasio','Times New Roman',serif; font-size:15px; font-weight:700; color:#fff; letter-spacing:0.3px; line-height:1.05; white-space:nowrap; }
         .hdr-adv { font-size:8.5px; font-weight:700; color:#F5C518; letter-spacing:3px; text-transform:uppercase; }
+        .cal-chips { display:none; }
+        @media (min-width: 768px) {
+          .cal-chips { display:block; }
+          .cal-dots { display:none !important; }
+          .cal-cell { min-height:84px !important; }
+        }
         @media (max-width: 520px) {
           .hdr-sys { display:none !important; }
           .hdr-wrap { padding-left:calc(12px + env(safe-area-inset-left, 0px)) !important; padding-right:calc(12px + env(safe-area-inset-right, 0px)) !important; }
