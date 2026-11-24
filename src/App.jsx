@@ -420,6 +420,7 @@ const Icon = ({ name, size=18, color="currentColor" }) => {
     plus:     <path d="M12 5v14M5 12h14" stroke={color} strokeWidth="2" strokeLinecap="round"/>,
     search:   <><circle cx="11" cy="11" r="7" stroke={color} strokeWidth="1.5" fill="none"/><path d="M21 21l-4.3-4.3" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M8 3v4M16 3v4M3 10h18" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></>,
+    file:     <><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h6" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></>,
     list:     <path d="M3 6h18M3 12h18M3 18h18" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>,
     check:    <path d="M5 12l5 5L20 7" stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
     edit:     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
@@ -3493,32 +3494,52 @@ export default function App() {
       {/* ── ABAS ── */}
       <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, display:"flex", overflowX:"auto", position:"sticky", top:64, zIndex:40 }}>
         {[
-          { key:"intimacoes", label:"Intimações", ico:"mail" },
-          { key:"lista",      label:"Prazos",     ico:"list" },
-          { key:"tarefas",    label:"Tarefas",    ico:"check" },
-          { key:"calendario", label:"Calendário", ico:"calendar" },
-          { key:"djen",       label:"DJEN",       ico:"flag" },
-          { key:"alvaras",    label:"Alvarás",    ico:"mail" },
-          { key:"assinaturas", label:"Assinaturas", ico:"check" },
-        ].map(({ key, label, ico }) => (
-          <button key={key} onClick={() => setAba(key)}
+          { key:"intimacoes", label:"Intimações", ico:"mail", grupo:["intimacoes"] },
+          { key:"lista",      label:"Prazos",     ico:"list", grupo:["lista","calendario"] },
+          { key:"djen",       label:"DJEN",       ico:"flag", grupo:["djen"] },
+          { key:"alvaras",    label:"Docs",       ico:"file", grupo:["alvaras","assinaturas"] },
+        ].map(({ key, label, ico, grupo }) => { const ativa = grupo.includes(aba); return (
+          <button key={key} onClick={() => { if (!ativa) setAba(key); }}
+            title={key==="alvaras" ? "Documentos: alvarás e assinaturas" : undefined}
             style={{
               background:"transparent", border:"none",
-              borderBottom:`2.5px solid ${aba===key?"#F5C518":"transparent"}`,
-              color: aba===key ? T.primary : T.textSoft,
-              cursor:"pointer", padding:"12px 18px", fontSize:13,
-              fontWeight: aba===key ? 700 : 500,
+              borderBottom:`2.5px solid ${ativa?"#F5C518":"transparent"}`,
+              color: ativa ? T.primary : T.textSoft,
+              cursor:"pointer", padding:"12px 8px", fontSize:13,
+              fontWeight: ativa ? 700 : 500, flex:"1 0 auto", justifyContent:"center",
               display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
             }}>
-            <Icon name={ico} size={15} color={aba===key?T.primary:T.textSoft} />
+            <Icon name={ico} size={15} color={ativa?T.primary:T.textSoft} />
             {label}
             {key === "intimacoes" && novasIntim > 0 && (
               <span title={`${novasIntim} intimação(ões) NOVO — ainda não cumprida(s)`} aria-label={`${novasIntim} novas`}
                 style={{ background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:16, lineHeight:"16px", textAlign:"center" }}>{novasIntim}</span>
             )}
           </button>
-        ))}
+        ); })}
       </div>
+
+      {/* ── v40: chave dentro do grupo (Prazos: Lista | Mês · Docs: Alvarás | Assinaturas) ── */}
+      {(() => {
+        const sub = (aba==="lista" || aba==="calendario") ? [["lista","Lista"],["calendario","Mês"]]
+                  : (aba==="alvaras" || aba==="assinaturas") ? [["alvaras","Alvarás"],["assinaturas","Assinaturas"]]
+                  : null;
+        if (!sub) return null;
+        return (
+          <div style={{ padding:"12px 16px 0" }}>
+            <div role="tablist" style={{ display:"flex", background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:3, maxWidth:360 }}>
+              {sub.map(([k, lbl]) => (
+                <button key={k} role="tab" aria-selected={aba===k} onClick={() => setAba(k)}
+                  style={{ flex:1, minHeight:34, background:aba===k?T.card:"transparent", border:"none", borderRadius:7, fontSize:13,
+                    fontWeight:aba===k?700:500, color:aba===k?T.primary:T.textSoft, cursor:"pointer",
+                    boxShadow:aba===k?"0 1px 3px #00000022":"none" }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══ ABA LISTA ══ */}
       {aba === "lista" && (
@@ -3850,6 +3871,7 @@ export default function App() {
             {[
               { ico:"mic",      lbl:"Comando rápido",   fn:() => { setCmdTexto(""); setCmdParsed(null); setCmdModal(true); setMenuMobile(false); } },
               { ico:"bell",     lbl:"Resumo do dia",    fn:() => { setResumoAberto(true); setMenuMobile(false); } },
+              { ico:"check",    lbl:"Tarefas",          fn:() => { setAba("tarefas"); setMenuMobile(false); } },
               { ico:"tag",      lbl:"Tipos de prazo",   fn:() => { setGerirTipos(true); setMenuMobile(false); } },
               { ico:"user",     lbl:"Clientes",         fn:() => { setClienteModal(true); setMenuMobile(false); } },
               { ico:"flag",     lbl:"Feriados",         fn:() => { setFeriadoModal(true); setMenuMobile(false); } },
