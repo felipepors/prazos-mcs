@@ -523,6 +523,26 @@ function diasLabel(du, concluido) {
 }
 
 function fmt(s) { if (!s) return ""; const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; }
+// v44 — "sexta-feira, 27 de novembro" (com o ano quando não é o corrente)
+function diaExtenso(s, comData = true) {
+  if (!s) return "";
+  const d = new Date(s + "T00:00:00");
+  if (isNaN(d)) return "";
+  const SEM = ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+  const MES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  if (!comData) return SEM[d.getDay()];
+  const ano = d.getFullYear() !== new Date().getFullYear() ? ` de ${d.getFullYear()}` : "";
+  return `${SEM[d.getDay()]}, ${d.getDate()} de ${MES[d.getMonth()]}${ano}`;
+}
+// v44 — grupo de um prazo pendente por dias úteis (lista de Prazos e Resumo do dia)
+function grupoDoPrazo(p) {
+  const du = diasUteisRestantes(p.dataLimite);
+  if (du < 0) return "vencidos";
+  if (du === 0) return "hoje";
+  if (du === 1) return "amanha";
+  if (du <= 5) return "semana";
+  return "depois";
+}
 function fmtLong(s) {
   if (!s) return "";
   const [y,m,d] = s.split("-");
@@ -754,6 +774,16 @@ const FERIADOS_NOMES_SEED = (() => {
 // ═════════════════════════════════════════════════════════════════════════════
 function Badge({ children, color, bg, size=12 }) {
   return <span style={{ background:bg, color, fontSize:size, fontWeight:700, borderRadius:20, padding:"3px 10px", fontFamily:"Inter,system-ui,sans-serif", whiteSpace:"nowrap" }}>{children}</span>;
+}
+
+function CampoData({ value, onChange, T, ariaLabel }) {
+  return (
+    <div className="campo-data" style={{ background:T.card, border:`1.5px solid ${T.border}`, borderRadius:12, padding:"11px 14px", color:T.text }}>
+      <span style={{ display:"inline-flex", flexShrink:0 }}><Icon name="calendar" size={18} color={T.textMuted} /></span>
+      <input type="date" className={value ? "" : "data-vazia"} value={value || ""} onChange={e => onChange(e.target.value)} aria-label={ariaLabel} style={{ fontSize:16 }} />
+      {!value && <span className="dica" style={{ color:T.textMuted, fontSize:16 }}>Selecionar data</span>}
+    </div>
+  );
 }
 
 function StatusBadge({ status, modo }) {
@@ -3495,8 +3525,25 @@ export default function App() {
   const hasOverlay = resumoAberto || gerirTipos || modal !== null || !!confirmDel || !!confirmDelConcl || cmdModal || tarefaModal || !!exportModal || feriadoModal || menuMobile || clienteModal || backupModal;
 
   // Estilos reutilizáveis (memo do tema)
-  const INP = { background:T.card, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"Inter,system-ui,sans-serif", outline:"none", width:"100%", boxSizing:"border-box" };
-  const LBL = { fontSize:12, color:T.textMuted, letterSpacing:1.2, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" };
+  const INP = { background:T.card, border:`1.5px solid ${T.border}`, borderRadius:12, padding:"11px 14px", color:T.text, fontSize:16, fontFamily:"Inter,system-ui,sans-serif", outline:"none", width:"100%", boxSizing:"border-box" };
+  const LBL = { fontSize:13, color:T.textSoft, fontWeight:600, marginBottom:6, display:"block", textAlign:"left" };
+  // v44 — chave segmentada (mesmo desenho de Lista | Mês); corPonto opcional pinta um ponto por opção
+  const segCtl = (opcoes, valor, onPick, corPonto) => (
+    <div role="radiogroup" style={{ display:"flex", gap:2, background:T.bg, border:`1px solid ${T.border}`, borderRadius:12, padding:3 }}>
+      {opcoes.map(([k, lbl]) => {
+        const on = valor === k;
+        return (
+          <button key={k} type="button" role="radio" aria-checked={on} onClick={() => onPick(k)}
+            style={{ flex:1, minHeight:40, background:on?T.card:"transparent", border:"none", borderRadius:9, fontSize:14, padding:"6px 8px",
+              fontWeight:on?700:500, color:on?T.primary:T.textSoft, cursor:"pointer", boxShadow:on?"0 1px 3px #00000022":"none",
+              display:"inline-flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            {corPonto && <span aria-hidden="true" style={{ width:8, height:8, borderRadius:"50%", background:corPonto(k), flexShrink:0 }} />}
+            {lbl}
+          </button>
+        );
+      })}
+    </div>
+  );
   const BTN_GHOST = { background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 14px", color:T.textSoft, cursor:"pointer", fontSize:13, fontWeight:500 };
   const BTN_PRIMARY = { background:T.primary, border:"none", borderRadius:10, padding:"10px 18px", color:T.primaryText, fontWeight:600, cursor:"pointer", fontSize:14, display:"inline-flex", alignItems:"center", gap:6 };
 
@@ -3548,6 +3595,15 @@ export default function App() {
         input.data-vazia::-webkit-datetime-edit { color: transparent; }
         input.data-vazia:focus::-webkit-datetime-edit { color: inherit; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
+        input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus, select:focus, textarea:focus { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
+        .campo-data { position:relative; display:flex; align-items:center; gap:10px; overflow:hidden; min-height:48px; }
+        .campo-data input { flex:1 1 auto; min-width:0; width:100%; border:none !important; padding:0; margin:0; background:transparent; color:inherit; outline:none; min-height:24px; text-align:left; }
+        .campo-data input::-webkit-date-and-time-value { text-align:left; margin:0; }
+        .campo-data input:focus { box-shadow:none !important; }
+        .campo-data:focus-within { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
+        .campo-data .dica { position:absolute; left:42px; top:50%; transform:translateY(-50%); pointer-events:none; }
+        .campo-data input:focus + .dica { display:none; }
+        @supports (-webkit-touch-callout: none) { .campo-data input { -webkit-appearance:none; appearance:none; } }
         .hdr-btn { width:38px; height:38px; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
           background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#fff; cursor:pointer;
           position:relative; transition:background .15s, border-color .15s; }
@@ -3778,14 +3834,7 @@ export default function App() {
               const pendentes = lista.filter(p => !p.concluido);
               const concluidos = lista.filter(p => p.concluido).sort((x,y) => ((y.concluidoEm ? 1 : 0) - (x.concluidoEm ? 1 : 0)) || (y.concluidoEm || y.dataLimite || "").localeCompare(x.concluidoEm || x.dataLimite || "") || (y.id - x.id));
               const amanha = (() => { const d = new Date(); d.setDate(d.getDate()+1); return isoLocal(d); })();
-              const grupoDe = p => {
-                const du = diasUteisRestantes(p.dataLimite);
-                if (du < 0) return "vencidos";
-                if (du === 0) return "hoje";
-                if (du === 1) return "amanha";
-                if (du <= 5) return "semana";
-                return "depois";
-              };
+              const grupoDe = grupoDoPrazo;
               const GRUPOS = [
                 { k:"vencidos", label:"Vencidos", st:"vencido" },
                 { k:"hoje",     label:"Hoje", st:"urgente" },
@@ -4117,58 +4166,107 @@ export default function App() {
       {/* ══ MODAL RESUMO ══ */}
       {resumoAberto && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
-          <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:540, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
-            <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", letterSpacing:1, marginBottom:2 }}>{fmtLong(hoje)}</div>
-                <h2 style={{ margin:0, fontSize:17, color:T.primary, fontWeight:700 }}>Resumo do dia</h2>
+          <div style={{ background:T.card, borderRadius:20, width:"100%", maxWidth:540, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}`, textAlign:"left", overflow:"hidden" }}>
+            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                <span aria-hidden="true" style={{ width:4, alignSelf:"stretch", minHeight:26, borderRadius:2, background:"#F5C518", flexShrink:0 }} />
+                <div style={{ minWidth:0 }}>
+                  <h2 style={{ margin:0, fontSize:18, color:T.text, fontWeight:700 }}>Resumo do dia</h2>
+                  <div style={{ fontSize:14, color:T.textSoft, marginTop:2 }}>{diaExtenso(hoje)}</div>
+                </div>
               </div>
-              <button onClick={() => setResumoAberto(false)} style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
+              <button onClick={() => setResumoAberto(false)} aria-label="Fechar" style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
                 <Icon name="close" size={20} color={T.textSoft} />
               </button>
             </div>
-            <div style={{ padding:"16px 18px", overflowY:"auto", flex:1 }}>
-              {totalAtencao===0
-                ? <div style={{ textAlign:"center", padding:"24px 0", color:T.textMuted }}>
-                    <Icon name="check" size={36} color={T.success} />
-                    <div style={{ fontSize:14, fontWeight:600, color:T.success, marginTop:8 }}>Tudo em dia!</div>
+            <div style={{ padding:"16px 20px", overflowY:"auto", flex:1 }}>
+              {(() => {
+                const DIAS_SEM = ["dom","seg","ter","qua","qui","sex","sáb"];
+                const MESES_AB = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+                const itens = [...resumoData.vencidos, ...resumoData.urgentes, ...resumoData.proximos];
+                const doGrupo = k => itens.filter(p => grupoDoPrazo(p) === k);
+                const amanhaIso = (() => { const d = new Date(); d.setDate(d.getDate()+1); return isoLocal(d); })();
+                const GRUPOS = [
+                  { k:"vencidos", label:"Vencidos", st:"vencido" },
+                  { k:"hoje",     label:"Hoje", st:"urgente" },
+                  { k:"amanha",   label: doGrupo("amanha").some(p => p.dataLimite !== amanhaIso) ? "Próximo dia útil" : "Amanhã", st:"urgente" },
+                  { k:"semana",   label:"Esta semana", st:"proximo" },
+                ];
+                const nAteAmanha = doGrupo("hoje").length + doGrupo("amanha").length;
+                return (<>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:8, marginBottom:6 }}>
+                    {[
+                      { lbl:"Vencidos", n:doGrupo("vencidos").length, st:"vencido" },
+                      { lbl:"Até amanhã", n:nAteAmanha, st:"urgente" },
+                      { lbl:"Na semana", n:doGrupo("semana").length, st:"proximo" },
+                    ].map(({ lbl, n, st }) => (
+                      <div key={lbl} style={{ background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 12px" }}>
+                        <div style={{ fontSize:22, fontWeight:800, lineHeight:1.1, color: n > 0 ? STATUS_CFG[st][modo].c : T.textMuted }}>{n}</div>
+                        <div style={{ fontSize:12, color:T.textSoft, marginTop:3, whiteSpace:"nowrap" }}>{lbl}</div>
+                      </div>
+                    ))}
                   </div>
-                : [
-                    { titulo:"Vencidos", color:STATUS_CFG.vencido[modo].c, items:resumoData.vencidos },
-                    { titulo:"Urgentes (até 2 du)", color:STATUS_CFG.urgente[modo].c, items:resumoData.urgentes },
-                    { titulo:"Próximos (até 5 du)", color:STATUS_CFG.proximo[modo].c, items:resumoData.proximos },
-                  ].map(({titulo, color, items}) => items.length > 0 && (
-                    <div key={titulo} style={{ marginBottom:14 }}>
-                      <div style={{ fontSize:12, color, fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>{titulo} · {items.length}</div>
-                      {items.map(p => {
-                        const du = diasUteisRestantes(p.dataLimite);
+                  {totalAtencao===0
+                    ? <div style={{ textAlign:"center", padding:"28px 0 20px" }}>
+                        <Icon name="check" size={36} color={T.success} />
+                        <div style={{ fontSize:15, fontWeight:700, color:T.success, marginTop:8 }}>Tudo em dia</div>
+                        <div style={{ fontSize:13, color:T.textSoft, marginTop:4 }}>Nenhum prazo vencido ou para os próximos 5 dias úteis.</div>
+                      </div>
+                    : GRUPOS.map(g => {
+                        const lista = doGrupo(g.k);
+                        if (!lista.length) return null;
                         return (
-                          <div key={p.id} style={{ background:T.cardAlt, border:`1px solid ${T.border}`, borderLeft:`3px solid ${color}`, borderRadius:8, padding:"10px 12px", marginBottom:6 }}>
-                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
-                              <div style={{ minWidth:0, flex:1 }}>
-                                <div style={{ fontSize:13, fontWeight:600, color:T.text, marginBottom:2 }}>{p.parte}</div>
-                                <div style={{ fontSize:12, color:T.textSoft }}>{p.tipo} · {p.responsavel}</div>
-                                {p.obs && <div style={{ fontSize:12, color:T.textMuted, fontStyle:"italic", marginTop:3 }}>{p.obs}</div>}
-                              </div>
-                              <div style={{ textAlign:"right", flexShrink:0 }}>
-                                <div style={{ fontSize:13, fontWeight:700, color }}>{fmt(p.dataLimite)}</div>
-                                <div style={{ fontSize:12, color:T.textMuted, marginTop:1 }}>{diasLabel(du, p.concluido)}</div>
-                              </div>
+                          <div key={g.k}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 2px 8px", fontSize:14, fontWeight:700, color:T.text }}>
+                              <span style={{ width:9, height:9, borderRadius:"50%", background:STATUS_CFG[g.st][modo].c, display:"inline-block" }} />
+                              {g.label}
+                              <span style={{ fontWeight:500, color:T.textMuted }}>· {lista.length} {lista.length === 1 ? "prazo" : "prazos"}</span>
+                            </div>
+                            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                              {lista.map(p => {
+                                const st = STATUS_CFG[p.status][modo];
+                                const du = diasUteisRestantes(p.dataLimite);
+                                const pd = (p.dataLimite || "").split("-");
+                                const dObj = new Date((p.dataLimite || "") + "T00:00:00");
+                                const ok = pd.length === 3 && !isNaN(dObj);
+                                return (
+                                  <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:12, display:"flex", alignItems:"flex-start", gap:12 }}>
+                                    <div style={{ width:50, flexShrink:0, borderRadius:10, textAlign:"center", padding:"6px 0", background:st.bg, color:st.text }}>
+                                      <div style={{ fontSize:12 }}>{ok ? DIAS_SEM[dObj.getDay()] : ""}</div>
+                                      <div style={{ fontSize:19, fontWeight:700, lineHeight:1.1 }}>{ok ? pd[2] : "—"}</div>
+                                      <div style={{ fontSize:12 }}>{ok ? MESES_AB[parseInt(pd[1],10)-1] : ""}</div>
+                                    </div>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                      <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                                        <span style={{ flex:1, minWidth:0, fontSize:15, fontWeight:600, color:T.text, overflowWrap:"anywhere" }}>{p.parte}</span>
+                                        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:"3px 9px", borderRadius:999, background:st.bg, color:st.text, whiteSpace:"nowrap" }}>{diasLabel(du, false)}</span>
+                                      </div>
+                                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:7 }}>
+                                        <span style={{ fontSize:13, fontWeight:700, color:"#1B2A4A", background:"#F5C518", padding:"2px 10px", borderRadius:999 }}>{p.tipo}</span>
+                                        {p.responsavel && <span style={{ fontSize:12, color:T.textMuted }}>{p.responsavel}</span>}
+                                      </div>
+                                      {p.obs && <div style={{ fontSize:13, color:T.textSoft, marginTop:7, lineHeight:1.45, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{p.obs}</div>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         );
-                      })}
-                    </div>
-                  ))
-              }
-              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:12, marginTop:8 }}>
-                <div style={{ ...LBL, marginBottom:6 }}>Enviar por e-mail</div>
-                <div style={{ display:"flex", gap:6 }}>
-                  <input value={emailDest} onChange={e => setEmailDest(e.target.value)} style={{ ...INP, flex:1, fontSize:12 }} />
-                  <button onClick={gerarEmail} style={{ ...BTN_PRIMARY, padding:"9px 14px", fontSize:12 }}>
-                    <Icon name="mail" size={14} color="#fff" />
-                  </button>
-                </div>
+                      })
+                  }
+                </>);
+              })()}
+              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:14, marginTop:18 }}>
+                <label>
+                  <span style={LBL}>Enviar o resumo por e-mail</span>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <input type="email" value={emailDest} onChange={e => setEmailDest(e.target.value)} style={{ ...INP, flex:1, minWidth:0 }} />
+                    <button type="button" onClick={gerarEmail} style={{ ...BTN_PRIMARY, borderRadius:12, flexShrink:0 }}>
+                      <Icon name="mail" size={16} color={T.primaryText} /> Enviar
+                    </button>
+                  </div>
+                </label>
               </div>
             </div>
           </div>
@@ -4562,99 +4660,91 @@ export default function App() {
       {/* ══ MODAL NOVO/EDITAR PRAZO ══ */}
       {modal !== null && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
-          <div style={{ background:T.card, borderRadius:16, padding:"20px", width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-              <h2 style={{ margin:0, fontSize:17, color:T.text, fontWeight:700 }}>{modal==="novo"?"Novo Prazo":"Editar Prazo"}</h2>
-              <button onClick={() => setModal(null)} style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
-                <Icon name="close" size={18} color={T.textSoft} />
+          <div style={{ background:T.card, borderRadius:20, width:"100%", maxWidth:520, maxHeight:"90vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}`, textAlign:"left", overflow:"hidden" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span aria-hidden="true" style={{ width:4, height:24, borderRadius:2, background:"#F5C518", flexShrink:0 }} />
+                <h2 style={{ margin:0, fontSize:18, color:T.text, fontWeight:700 }}>{modal==="novo"?"Novo prazo":"Editar prazo"}</h2>
+              </div>
+              <button onClick={() => setModal(null)} aria-label="Fechar" style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
+                <Icon name="close" size={20} color={T.textSoft} />
               </button>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ padding:"16px 20px", overflowY:"auto", flex:1, display:"flex", flexDirection:"column", gap:14 }}>
               <label>
-                <span style={LBL}>Nº do Processo (CNJ)</span>
-                <input value={form.processo||""} onChange={e => setForm(f => ({...f, processo: mascararProcesso(e.target.value)}))} placeholder="0000000-00.0000.0.00.0000" style={{...INP, fontFamily:"monospace"}} maxLength={25} />
+                <span style={LBL}>Nº do processo (CNJ)</span>
+                <input value={form.processo||""} onChange={e => setForm(f => ({...f, processo: mascararProcesso(e.target.value)}))} placeholder="0000000-00.0000.0.00.0000" inputMode="numeric" style={{...INP, fontFamily:"monospace"}} maxLength={25} />
               </label>
               <label>
-                <span style={LBL}>Parte / Cliente</span>
+                <span style={LBL}>Parte / cliente</span>
                 <input list="lista-clientes" value={form.parte||""} onChange={e => setForm(f => ({...f, parte:e.target.value}))} placeholder="Digite ou selecione um cliente" style={INP} />
                 <datalist id="lista-clientes">
                   {clientes.map(c => <option key={c.id} value={c.nome}>{c.tipo}{c.obs?" — "+c.obs:""}</option>)}
                 </datalist>
               </label>
               <label>
-                <span style={LBL}>Tipo</span>
+                <span style={LBL}>Tipo de prazo</span>
                 <select value={form.tipo||TIPOS_DEFAULT[0]} onChange={e => setForm(f => ({...f,tipo:e.target.value}))} style={INP}>
                   <optgroup label="Padrão">{TIPOS_DEFAULT.map(t => <option key={t}>{t}</option>)}</optgroup>
                   {tiposCustom.length > 0 && <optgroup label="Personalizados">{tiposCustom.map(t => <option key={t}>{t}</option>)}</optgroup>}
                 </select>
               </label>
-              <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
-                <div style={{ display:"flex", gap:0, marginBottom:10, background:T.border, borderRadius:8, padding:2 }}>
-                  {[{ key:"final", label:"Data final" }, { key:"inicio", label:"Início + dias úteis" }].map(({ key, label }) => (
-                    <button key={key} type="button"
-                      onClick={() => setForm(f => ({ ...f, modoData: key, dataInicio:"", diasUteis:"", dataLimite: key==="final" ? f.dataLimite : "" }))}
-                      style={{ flex:1, background:(form.modoData||"final")===key?T.card:"transparent", border:"none", borderRadius:6, padding:"6px 8px", fontSize:12, fontWeight:(form.modoData||"final")===key?700:500, color:(form.modoData||"final")===key?T.primary:T.textSoft, cursor:"pointer" }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              <div style={{ background:T.cardAlt, borderRadius:14, padding:14, border:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:12 }}>
+                {segCtl([["final","Data final"],["inicio","Início + dias úteis"]], form.modoData||"final",
+                  key => setForm(f => ({ ...f, modoData: key, dataInicio:"", diasUteis:"", dataLimite: key==="final" ? f.dataLimite : "" })))}
                 {(form.modoData||"final") === "final" ? (
                   <label>
                     <span style={LBL}>Data limite</span>
-                    <input type="date" value={form.dataLimite||""} onChange={e => setForm(f => ({...f, dataLimite:e.target.value}))} style={INP} />
+                    <CampoData value={form.dataLimite} onChange={v => setForm(f => ({...f, dataLimite:v}))} T={T} ariaLabel="Data limite" />
                   </label>
                 ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:12 }}>
                       <label>
                         <span style={LBL}>1º dia da contagem</span>
-                        <input type="date" value={form.dataInicio||""} onChange={e => {
-                          const di = e.target.value;
+                        <CampoData value={form.dataInicio} T={T} ariaLabel="Primeiro dia da contagem" onChange={di => {
                           const du = parseInt(form.diasUteis||0);
                           const dl = di && du > 0 ? calcularDataFinal(di, du) : "";
                           setForm(f => ({ ...f, dataInicio:di, dataLimite:dl }));
-                        }} style={INP} />
+                        }} />
                       </label>
                       <label>
                         <span style={LBL}>Dias úteis</span>
-                        <input type="number" min="1" max="360" value={form.diasUteis||""} onChange={e => {
+                        <input type="number" inputMode="numeric" min="1" max="360" value={form.diasUteis||""} onChange={e => {
                           const du = parseInt(e.target.value||0);
                           const di = form.dataInicio||"";
                           const dl = di && du > 0 ? calcularDataFinal(di, du) : "";
                           setForm(f => ({ ...f, diasUteis:e.target.value, dataLimite:dl }));
-                        }} placeholder="15" style={INP} />
+                        }} placeholder="15" style={{ ...INP, minHeight:48 }} />
                       </label>
                     </div>
-                    <div style={{ fontSize:12, color:T.textMuted, lineHeight:1.45 }}>
+                    <div style={{ fontSize:13, color:T.textSoft, lineHeight:1.45 }}>
                       ⚠ O dia informado <strong>conta como o 1º dia útil</strong>. Pelo CPC art. 224, informe o 1º dia útil <em>seguinte</em> à publicação/intimação — não o dia dela.
                     </div>
-                    {form.dataLimite && (
-                      <div style={{ background:T.primarySoft, borderRadius:8, padding:"8px 12px", display:"flex", alignItems:"center", gap:8 }}>
-                        <Icon name="calendar" size={18} color={T.primary} />
-                        <div>
-                          <div style={{ fontSize:12, color:T.textMuted, fontWeight:600, textTransform:"uppercase" }}>Calculado</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:T.primary }}>{fmt(form.dataLimite)}</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  </>
                 )}
+                {form.dataLimite && (() => {
+                  const du = diasUteisRestantes(form.dataLimite);
+                  const stf = STATUS_CFG[calcStatus(form.dataLimite, false)][modo];
+                  const calculado = (form.modoData||"final") !== "final";
+                  return (
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:8, background:stf.bg, color:stf.text, borderRadius:10, padding:"9px 12px", fontSize:13, fontWeight:600, lineHeight:1.45 }}>
+                      <span style={{ display:"inline-flex", flexShrink:0, marginTop:1 }}><Icon name="calendar" size={16} color={stf.text} /></span>
+                      <div style={{ minWidth:0 }}>
+                        <div>{calculado ? `Vence em ${fmt(form.dataLimite)}\u00A0· ` : ""}{diaExtenso(form.dataLimite, false)}{"\u00A0· "}<strong>{diasLabel(du, false)}</strong></div>
+                        {!isDiaUtil(form.dataLimite) && <div style={{ fontWeight:700 }}>⚠ Não é dia útil — confira a data.</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <label>
-                  <span style={LBL}>Responsável</span>
-                  <select value={form.responsavel||"Felipe"} onChange={e => setForm(f => ({...f,responsavel:e.target.value}))} style={INP}>
-                    <option>Felipe</option><option>Janine</option><option>Equipe</option>
-                  </select>
-                </label>
-                <label>
-                  <span style={LBL}>Prioridade</span>
-                  <select value={form.prioridade||"media"} onChange={e => setForm(f => ({...f,prioridade:e.target.value}))} style={INP}>
-                    <option value="alta">Alta</option>
-                    <option value="media">Média</option>
-                    <option value="baixa">Baixa</option>
-                  </select>
-                </label>
+              <div>
+                <span style={LBL}>Responsável</span>
+                {segCtl([["Felipe","Felipe"],["Janine","Janine"],["Equipe","Equipe"]], form.responsavel||"Felipe", v => setForm(f => ({...f, responsavel:v})))}
+              </div>
+              <div>
+                <span style={LBL}>Prioridade</span>
+                {segCtl([["alta","Alta"],["media","Média"],["baixa","Baixa"]], form.prioridade||"media", v => setForm(f => ({...f, prioridade:v})), k => PRIO_CFG[k][modo].c)}
               </div>
               <label>
                 <span style={LBL}>Recorrência</span>
@@ -4668,25 +4758,32 @@ export default function App() {
                   <option value="anual">Anual</option>
                 </select>
                 {form.recorrencia && form.recorrencia !== "none" && (
-                  <div style={{ fontSize:12, color:T.textMuted, marginTop:4, fontStyle:"italic" }}>Ao concluir, será criado automaticamente um novo prazo na próxima data.</div>
+                  <div style={{ fontSize:13, color:T.textSoft, marginTop:6 }}>Ao concluir, um novo prazo é criado automaticamente na próxima data.</div>
                 )}
               </label>
               <label>
                 <span style={LBL}>Observações</span>
-                <textarea value={form.obs||""} onChange={e => setForm(f => ({...f,obs:e.target.value}))} rows={2} placeholder="Notas..." style={{ ...INP, resize:"vertical" }} />
+                <textarea value={form.obs||""} onChange={e => setForm(f => ({...f,obs:e.target.value}))} rows={3} placeholder="Notas sobre o prazo" style={{ ...INP, resize:"vertical", lineHeight:1.45 }} />
               </label>
               {modal !== "novo" && (
-                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", background:T.successSoft, borderRadius:10, padding:"10px 14px" }}>
-                  <input type="checkbox" checked={form.concluido||false} onChange={e => setForm(f => ({...f,concluido:e.target.checked, concluidoEm: e.target.checked ? (f.concluidoEm || isoLocal()) : null}))} style={{ width:18, height:18, accentColor:T.success }} />
-                  <span style={{ fontSize:13, color:T.success, fontWeight:600 }}>Marcar como concluído</span>
+                <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", background:T.successSoft, borderRadius:12, padding:"12px 14px" }}>
+                  <input type="checkbox" checked={form.concluido||false} onChange={e => setForm(f => ({...f,concluido:e.target.checked, concluidoEm: e.target.checked ? (f.concluidoEm || isoLocal()) : null}))} style={{ width:20, height:20, accentColor:T.success }} />
+                  <span style={{ fontSize:14, color:T.success, fontWeight:700 }}>Marcar como concluído</span>
                 </label>
               )}
             </div>
-            <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
-              <button onClick={() => setModal(null)} style={BTN_GHOST}>Cancelar</button>
-              <button onClick={salvar} disabled={!form.processo||!form.dataLimite} style={{ ...BTN_PRIMARY, opacity:(!form.processo||!form.dataLimite)?0.4:1 }}>
-                <Icon name="check" size={14} color="#fff" /> Salvar
-              </button>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"8px 10px", alignItems:"center", padding:"14px 20px", borderTop:`1px solid ${T.border}`, background:T.card }}>
+              {(!form.processo||!form.dataLimite) && (
+                <span style={{ flex:"1 1 190px", minWidth:0, fontSize:12, color:T.textMuted, lineHeight:1.35 }}>
+                  Falta informar {[!form.processo && "o processo", !form.dataLimite && "a data limite"].filter(Boolean).join(" e ")}.
+                </span>
+              )}
+              <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
+                <button onClick={() => setModal(null)} style={{ ...BTN_GHOST, borderRadius:12, padding:"11px 16px", fontSize:14 }}>Cancelar</button>
+                <button onClick={salvar} disabled={!form.processo||!form.dataLimite} style={{ ...BTN_PRIMARY, borderRadius:12, padding:"11px 20px", fontWeight:700, opacity:(!form.processo||!form.dataLimite)?0.4:1, cursor:(!form.processo||!form.dataLimite)?"not-allowed":"pointer" }}>
+                  <Icon name="check" size={16} color={T.primaryText} /> Salvar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4729,7 +4826,7 @@ export default function App() {
               </div>
               <label>
                 <span style={LBL}>Prazo (opcional)</span>
-                <input type="date" value={tarefaForm.prazoLimite||""} onChange={e => setTarefaForm(f => ({...f,prazoLimite:e.target.value}))} style={INP} />
+                <CampoData value={tarefaForm.prazoLimite} onChange={v => setTarefaForm(f => ({...f,prazoLimite:v}))} T={T} ariaLabel="Prazo da tarefa" />
               </label>
               {tarefaEditId && (
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", background:T.successSoft, borderRadius:10, padding:"10px 14px" }}>
