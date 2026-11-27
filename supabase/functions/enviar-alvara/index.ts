@@ -14,7 +14,11 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { conferirAlvara, formatarCentavosBRL } from "../_shared/enriquecimento.ts";
 import { autorizarEmail } from "../_shared/autorizacao.ts";
 
-const REMETENTE = Deno.env.get("LOCAWEB_SMTP_USER") ?? "contato@martinscorreadasilva.com.br";
+// Remetente FIXO (decisão do escritório, 27/11/2026): todo aviso de alvará sai
+// de contato@martinscorreadasilva.com.br. Não lê LOCAWEB_SMTP_USER de propósito —
+// um secret trocado por engano não muda o remetente. É também a conta que
+// autentica no SMTP (a Locaweb exige remetente = conta autenticada).
+const REMETENTE = "contato@martinscorreadasilva.com.br";
 
 // Cópia oculta de todo aviso enviado (arquivo do escritório). O domínio
 // correadasilvamartins.com.br também é do escritório (confirmado em 27/11/2026;
