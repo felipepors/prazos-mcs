@@ -2056,7 +2056,9 @@ function conferirAlvara(a) {
   if (bruto > 0 && liquido <= 0) bloqueios.push("Valor líquido zerado ou negativo");
   if (!a.documento_valido) avisos.push("CNPJ/CPF com dígito verificador inválido ou não identificado");
   if (!a.data_creditamento) avisos.push("Data do creditamento não encontrada no PDF");
-  if (!(a.processo || "").trim()) avisos.push("Número do processo não encontrado");
+  const processo = (a.processo || "").trim();
+  if (!processo) avisos.push("Número do processo não encontrado no PDF");
+  else if (!/^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/.test(processo)) avisos.push("Número do processo fora do padrão CNJ — confira");
   if (!(a.numero_alvara || "").trim()) avisos.push("Número do alvará não encontrado");
   return { bloqueios, avisos };
 }

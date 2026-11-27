@@ -129,9 +129,13 @@ export function resolverDocumento(docCru: string): DocResolvido {
 
 // --- Nome do prestador -----------------------------------------------------
 
-const SUFIXO_STATUS = /\s*\((?:INTIMAD[OA]|CITAD[OA])\)\s*$/i;
+const SUFIXO_STATUS =
+  /\s*\((?:INTIMAD[OA]|CITAD[OA]|ADVOGAD[OA](?:\s+EXEQUENTE)?|EXEQUENTE)\)\s*$/i;
 
-/** Remove sufixos de status: "(INTIMADO)", "(INTIMADA)", "(CITADO)", "(CITADA)". */
+/**
+ * Remove sufixos de status/papel: "(INTIMADO)", "(INTIMADA)", "(CITADO)",
+ * "(CITADA)", "(ADVOGADO)", "(ADVOGADO EXEQUENTE)", "(EXEQUENTE)".
+ */
 export function limparNome(nome: string): string {
   let n = (nome ?? "").trim();
   while (SUFIXO_STATUS.test(n)) n = n.replace(SUFIXO_STATUS, "").trim();
@@ -163,6 +167,9 @@ export function dataExtensoParaISO(s: string): string {
 }
 
 // --- Conferência antes do envio --------------------------------------------
+
+/** Número único CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO */
+const PADRAO_CNJ = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
 
 /** Campos de um alvará gravado (linha de `alvaras`) usados na conferência. */
 export interface AlvaraParaConferir {
@@ -207,7 +214,9 @@ export function conferirAlvara(a: AlvaraParaConferir): Conferencia {
 
   if (!a.documento_valido) avisos.push("CNPJ/CPF com dígito verificador inválido ou não identificado");
   if (!a.data_creditamento) avisos.push("Data do creditamento não encontrada no PDF");
-  if (!(a.processo ?? "").trim()) avisos.push("Número do processo não encontrado");
+  const processo = (a.processo ?? "").trim();
+  if (!processo) avisos.push("Número do processo não encontrado no PDF");
+  else if (!PADRAO_CNJ.test(processo)) avisos.push("Número do processo fora do padrão CNJ — confira");
   if (!(a.numero_alvara ?? "").trim()) avisos.push("Número do alvará não encontrado");
 
   return { bloqueios, avisos };
@@ -240,7 +249,8 @@ export function enriquecer(e: AlvaraExtraido): AlvaraEnriquecido {
     imposto_renda_brl: formatarCentavosBRL(ir),
     valor_liquido_creditado_brl: formatarCentavosBRL(liquido),
     data_creditamento: dataBRparaISO(e.data_creditamento),
-    data_expedicao: dataExtensoParaISO(e.data_expedicao),
+    // Extenso no rodapé (modelo clássico) ou DD/MM/AAAA ("Data Assinatura").
+    data_expedicao: dataExtensoParaISO(e.data_expedicao) || dataBRparaISO(e.data_expedicao),
     banco: (e.banco ?? "").trim(),
     agencia: (e.agencia ?? "").trim(),
     conta: (e.conta ?? "").trim(),

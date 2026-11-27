@@ -125,3 +125,48 @@ Deno.test("conferência: documento inválido e data ausente só avisam", () => {
   assertEquals(c.bloqueios.length, 0, "não bloqueia");
   assertEquals(c.avisos.length, 2, "dois avisos");
 });
+
+// Modelo "extrato do sistema de alvarás eletrônicos" (Dados Gerais / Dados Pós
+// Assinatura), visto em 27/11/2026. Dados FICTÍCIOS — mesma forma do PDF real:
+// sem nº de processo, "Valor Tarifa" no lugar de despesa, datas DD/MM/AAAA e
+// sufixo "(ADVOGADO EXEQUENTE)" no nome.
+const FIXTURE_ELETRONICO: AlvaraExtraido = {
+  numero_alvara: "2650000001",
+  processo: "",
+  juizo: "",
+  beneficiario_nome: "FULANO DE TAL (ADVOGADO EXEQUENTE)",
+  beneficiario_doc: "529.982.247-25",
+  valor_alvara: "R$ 1.253,21",
+  despesa_bancaria: "R$ 8,00",
+  imposto_renda: "R$ 0,00",
+  data_creditamento: "24/11/2026",
+  data_expedicao: "23/11/2026",
+  banco: "341 - ITAU UNIBANCO",
+  agencia: "0001",
+  conta: "123456",
+};
+
+Deno.test("modelo eletrônico: valores, CPF, datas DD/MM/AAAA e nome limpo", () => {
+  const r = enriquecer(FIXTURE_ELETRONICO);
+  assertEquals(r.valor_bruto_centavos, 125321, "bruto");
+  assertEquals(r.despesa_bancaria_centavos, 800, "tarifa");
+  assertEquals(r.valor_liquido_creditado_brl, "R$ 1.245,21", "líquido");
+  assertEquals(r.documento_tipo, "CPF", "tipo");
+  assertEquals(r.documento_valido, true, "cpf válido");
+  assertEquals(r.prestador, "FULANO DE TAL", "sem (ADVOGADO EXEQUENTE)");
+  assertEquals(r.data_creditamento, "2026-11-24", "creditamento");
+  assertEquals(r.data_expedicao, "2026-11-23", "expedição em DD/MM/AAAA");
+  const c = conferirAlvara(r);
+  assertEquals(c.bloqueios.length, 0, "sem bloqueio");
+  assert(c.avisos.some((x) => x.includes("processo não encontrado")), "avisa processo ausente");
+});
+
+Deno.test("conferência: valor lido no lugar do processo vira aviso (fora do padrão CNJ)", () => {
+  const c = conferirAlvara(enriquecer({ ...FIXTURE_ELETRONICO, processo: "1253.21" }));
+  assert(c.avisos.some((x) => x.includes("padrão CNJ")), "avisa processo fora do padrão");
+});
+
+Deno.test("limpeza de sufixos de papel no nome", () => {
+  assertEquals(limparNome("BELTRANO (ADVOGADO)"), "BELTRANO", "advogado");
+  assertEquals(limparNome("SICRANA (EXEQUENTE)"), "SICRANA", "exequente");
+});
