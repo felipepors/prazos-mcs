@@ -888,12 +888,12 @@ function Calendario({ prazos, onEdit, onNovoData, feriadosNomes, T, modo, onToas
 
       {/* Grid */}
       <div style={{ background:T.card, borderRadius:14, overflow:"hidden", border:`1px solid ${T.border}` }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", borderBottom:`1px solid ${T.border}` }}>
           {DIAS_SEMANA.map((d,i) => (
             <div key={d} style={{ textAlign:"center", padding:"10px 2px", fontSize:10, fontWeight:700, color:i===0||i===6?T.danger:T.textMuted, letterSpacing:1, textTransform:"uppercase" }}>{d}</div>
           ))}
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))" }}>
           {cells.map((ds, i) => {
             if (!ds) return <div key={`e${i}`} style={{ borderRight:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, minHeight:54, background:T.cardAlt+"55" }} />;
             const dNum = parseInt(ds.split("-")[2]);
@@ -3673,7 +3673,7 @@ export default function App() {
               const MESES_AB = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
               const corProc = modo === "dark" ? "#85B7EB" : "#185FA5";
               const pendentes = lista.filter(p => !p.concluido);
-              const concluidos = lista.filter(p => p.concluido).sort((x,y) => (y.concluidoEm || y.dataLimite || "").localeCompare(x.concluidoEm || x.dataLimite || ""));
+              const concluidos = lista.filter(p => p.concluido).sort((x,y) => ((y.concluidoEm ? 1 : 0) - (x.concluidoEm ? 1 : 0)) || (y.concluidoEm || y.dataLimite || "").localeCompare(x.concluidoEm || x.dataLimite || "") || (y.id - x.id));
               const amanha = (() => { const d = new Date(); d.setDate(d.getDate()+1); return isoLocal(d); })();
               const grupoDe = p => {
                 const du = diasUteisRestantes(p.dataLimite);
@@ -3720,7 +3720,9 @@ export default function App() {
                         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:9 }}>
                           <span onClick={() => { setProcessoAlvoDjen(p.processo); setAba("djen"); }} title="Ver no DJEN"
                             style={{ fontFamily:"monospace", fontSize:13, color:corProc, cursor:"pointer", overflowWrap:"anywhere" }}>{p.processo}</span>
-                          {tribunal && <span title={`Tribunal: ${tribunal}`} style={{ fontSize:12, fontWeight:700, color:corTribunal(tribunal).c, background:corTribunal(tribunal).bg, padding:"1px 7px", borderRadius:4, whiteSpace:"nowrap" }}>{tribunal}</span>}
+                          {tribunal && <span title={`Tribunal: ${tribunal}`} style={modo === "dark"
+                            ? { fontSize:12, fontWeight:700, color:corTribunal(tribunal).bg, background:"transparent", border:`1px solid ${T.borderStrong}`, padding:"0 7px", borderRadius:4, whiteSpace:"nowrap" }
+                            : { fontSize:12, fontWeight:700, color:corTribunal(tribunal).c, background:corTribunal(tribunal).bg, padding:"1px 7px", borderRadius:4, whiteSpace:"nowrap" }}>{tribunal}</span>}
                           <span onClick={() => copiar(p.processo)} title="Copiar número" role="button" aria-label="Copiar número do processo" style={{ cursor:"pointer", display:"inline-flex", padding:2 }}>
                             <Icon name="copy" size={15} color={T.textMuted} />
                           </span>
@@ -3846,8 +3848,8 @@ export default function App() {
                       <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderTop:`1px solid ${T.border}` }}>
                         <Icon name="check" size={16} color={T.success} />
                         <div onClick={() => openEdit(p)} style={{ flex:1, minWidth:0, cursor:"pointer" }}>
-                          <div style={{ fontSize:13, color:T.textSoft, overflowWrap:"anywhere" }}>{p.parte} · {p.tipo}</div>
-                          <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{p.concluidoEm ? `concluído em ${fmt(p.concluidoEm)}` : `prazo de ${fmt(p.dataLimite)}`}</div>
+                          <div style={{ fontSize:13, fontWeight:600, color:T.textSoft, overflowWrap:"anywhere" }}>{p.parte}</div>
+                          <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{p.tipo} · {p.concluidoEm ? `concluído em ${fmt(p.concluidoEm)}` : `prazo de ${fmt(p.dataLimite)}`}</div>
                         </div>
                         <span onClick={() => toggleConcluidoComRecorrencia(p.id)} title="Reabrir prazo" role="button" aria-label="Reabrir prazo" style={{ cursor:"pointer", display:"inline-flex", padding:6 }}>
                           <Icon name="undo" size={16} color={T.textMuted} />
@@ -4572,7 +4574,7 @@ export default function App() {
               </label>
               {modal !== "novo" && (
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", background:T.successSoft, borderRadius:10, padding:"10px 14px" }}>
-                  <input type="checkbox" checked={form.concluido||false} onChange={e => setForm(f => ({...f,concluido:e.target.checked}))} style={{ width:18, height:18, accentColor:T.success }} />
+                  <input type="checkbox" checked={form.concluido||false} onChange={e => setForm(f => ({...f,concluido:e.target.checked, concluidoEm: e.target.checked ? (f.concluidoEm || isoLocal()) : null}))} style={{ width:18, height:18, accentColor:T.success }} />
                   <span style={{ fontSize:13, color:T.success, fontWeight:600 }}>Marcar como concluído</span>
                 </label>
               )}
@@ -4711,6 +4713,9 @@ export default function App() {
               </div>
             </div>
             <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:5 }}>Excluir este prazo?</div>
+            {prazos.find(p => p.id === confirmDel) && (
+              <div style={{ fontSize:13, color:T.textSoft, marginBottom:6, overflowWrap:"anywhere" }}><strong style={{ color:T.text }}>{prazos.find(p => p.id === confirmDel).parte}</strong> · {prazos.find(p => p.id === confirmDel).tipo} · {fmt(prazos.find(p => p.id === confirmDel).dataLimite)}</div>
+            )}
             <div style={{ fontSize:12, color:T.textMuted, marginBottom:(prazos.find(p => p.id === confirmDel) || {}).intimId ? 6 : 18 }}>Esta ação não pode ser desfeita.</div>
             {(prazos.find(p => p.id === confirmDel) || {}).intimId && (
               <div style={{ fontSize:12, color:T.textSoft, marginBottom:18 }}>{(prazos.find(p => p.id === confirmDel) || {}).concluido ? "Prazo já cumprido: a intimação que o originou continua como está (não volta para NOVO)." : "A intimação que originou o prazo perde o vínculo e, se estava Tratada, volta para NOVO."}</div>
