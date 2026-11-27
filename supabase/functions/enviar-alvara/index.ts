@@ -88,6 +88,9 @@ Deno.serve(async (req) => {
     if (alvara.status === "enviado") {
       return json({ error: "Este alvara ja foi enviado" }, 409);
     }
+    if (alvara.status === "enviando") {
+      return json({ error: "Este alvara ja esta sendo enviado" }, 409);
+    }
     if (alvara.status !== "aguardando_aprovacao") {
       return json({ error: `Status invalido para envio: ${alvara.status}` }, 409);
     }
@@ -126,26 +129,48 @@ Deno.serve(async (req) => {
       return json({ error: "Nenhum e-mail válido em email_destino" }, 400);
     }
 
-    // Envio SMTP Locaweb. Remetente = conta autenticada (exigência da Locaweb).
-    const client = new SMTPClient({
-      connection: {
-        hostname: "email-ssl.com.br",
-        port: 465,
-        tls: true,
-        auth: { username: REMETENTE, password: smtpPass },
-      },
-    });
+    // Reserva atômica: só segue quem trocar aguardando_aprovacao -> enviando.
+    // Dois cliques, duas abas ou uma retentativa não mandam o e-mail duas vezes.
+    const { data: reservado, error: resErr } = await supabase
+      .from("alvaras")
+      .update({ status: "enviando", atualizado_em: new Date().toISOString() })
+      .eq("id", alvara_id)
+      .eq("status", "aguardando_aprovacao")
+      .select("id");
+    if (resErr) return json({ error: `Falha ao reservar o envio: ${resErr.message}` }, 500);
+    if (!reservado || reservado.length === 0) {
+      return json({ error: "Este alvara ja esta sendo enviado ou ja foi enviado" }, 409);
+    }
 
+    // Envio SMTP Locaweb. Remetente = conta autenticada (exigência da Locaweb).
     try {
-      await client.send({
-        from: REMETENTE,
-        to: destinatarios,
-        bcc: copiasOcultas(),
-        subject: assunto,
-        content: corpo,
+      const client = new SMTPClient({
+        connection: {
+          hostname: "email-ssl.com.br",
+          port: 465,
+          tls: true,
+          auth: { username: REMETENTE, password: smtpPass },
+        },
       });
-    } finally {
-      await client.close();
+      try {
+        await client.send({
+          from: REMETENTE,
+          to: destinatarios,
+          bcc: copiasOcultas(),
+          subject: assunto,
+          content: corpo,
+        });
+      } finally {
+        await client.close();
+      }
+    } catch (e) {
+      // Não saiu: devolve para a fila de aprovação para poder tentar de novo.
+      await supabase
+        .from("alvaras")
+        .update({ status: "aguardando_aprovacao", atualizado_em: new Date().toISOString() })
+        .eq("id", alvara_id)
+        .eq("status", "enviando");
+      return json({ error: `Falha no SMTP: ${e instanceof Error ? e.message : e}` }, 502);
     }
 
     // Só marca 'enviado' APÓS o envio bem-sucedido.

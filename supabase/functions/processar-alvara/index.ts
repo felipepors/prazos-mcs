@@ -76,6 +76,29 @@ Deno.serve(async (req) => {
     const extraido = await extrairAlvara(pdfBase64, apiKey);
     const alvara = enriquecer(extraido);
 
+    // Duplicado? O mesmo PDF subido duas vezes geraria dois rascunhos e,
+    // potencialmente, dois e-mails ao prestador. Se o nº do alvará já existe,
+    // não grava de novo: apaga o PDF recém-enviado e devolve o registro antigo.
+    if (alvara.numero_alvara) {
+      const { data: existente } = await supabase
+        .from("alvaras")
+        .select("*")
+        .eq("numero_alvara", alvara.numero_alvara)
+        .order("criado_em", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (existente) {
+        if (storagePath && storagePath !== existente.pdf_path) {
+          await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+        }
+        return json({
+          error: `Alvara ${alvara.numero_alvara} ja foi cadastrado (status: ${existente.status})`,
+          duplicado: true,
+          alvara_existente: existente,
+        }, 409);
+      }
+    }
+
     // 3) Matching CNPJ/CPF -> e-mail em prestadores (documento = so digitos).
     const documentoDigitos = alvara.documento.replace(/\D/g, "");
     let prestadorId: string | null = null;

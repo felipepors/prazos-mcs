@@ -2022,6 +2022,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 const STATUS_ALVARA = {
   extraido:             { label:"Extraído",             cor:"#6b7280" },
   aguardando_aprovacao: { label:"Aguardando aprovação", cor:"#B8860B" },
+  enviando:             { label:"Enviando…",            cor:"#2b6cb0" },
   enviado:              { label:"Enviado",              cor:"#2E7D32" },
 };
 
@@ -2075,10 +2076,14 @@ function useAlvaras(userId) {
 }
 
 // Extrai a mensagem de erro do corpo JSON de uma Edge Function (supabase-js).
+// O corpo da resposta só pode ser lido uma vez — use corpoErroFn quando precisar
+// de outros campos além da mensagem (ex.: alvará duplicado).
+async function corpoErroFn(error) {
+  try { return await error.context.json(); } catch { return null; }
+}
 async function msgErroFn(error) {
-  let m = error?.message || "erro";
-  try { const b = await error.context.json(); if (b?.error) m = b.error; } catch (e) {}
-  return m;
+  const b = await corpoErroFn(error);
+  return b?.error || error?.message || "erro";
 }
 
 // Cadastro proativo de prestadores (CNPJ/CPF → e-mail). Alimenta o auto-match
@@ -2902,7 +2907,17 @@ function PainelAlvaras({ T, toast, user }) {
       const { error: upErr } = await sb.storage.from("alvaras").upload(path, file, { contentType: "application/pdf", upsert: false });
       if (upErr) throw new Error(upErr.message);
       const { data, error: fnErr } = await sb.functions.invoke("processar-alvara", { body: { storage_path: path } });
-      if (fnErr) throw new Error(await msgErroFn(fnErr));
+      if (fnErr) {
+        const b = await corpoErroFn(fnErr);
+        if (b?.duplicado && b.alvara_existente) {
+          // Mesmo alvará já cadastrado: não cria outro — abre o que já existe.
+          toast(b.error + " — abrindo o registro existente", "info");
+          await carregar();
+          setDetalhe(b.alvara_existente); setEmailNovo("");
+          return;
+        }
+        throw new Error(b?.error || fnErr.message || "erro");
+      }
       if (data?.error) throw new Error(data.error);
       toast("Alvará processado — revise e aprove", "success");
       await carregar();
@@ -2958,6 +2973,21 @@ function PainelAlvaras({ T, toast, user }) {
     } finally {
       setEnviando(false);
     }
+  };
+
+  // Destrava um envio interrompido (status preso em 'enviando'). Só troca se
+  // ainda estiver 'enviando' — não desfaz um 'enviado' gravado no meio tempo.
+  const liberarReenvio = async (a) => {
+    if (!window.confirm("Confirma que o e-mail NÃO foi enviado? O alvará volta para aguardando aprovação.")) return;
+    const sb = await initSupabase();
+    const { data, error } = await sb.from("alvaras")
+      .update({ status: "aguardando_aprovacao", atualizado_em: new Date().toISOString() })
+      .eq("id", a.id).eq("status", "enviando").select().maybeSingle();
+    if (error) { toast("Falha ao liberar: " + error.message, "danger"); return; }
+    if (!data) { toast("O status mudou nesse meio tempo — recarregando", "info"); await carregar(); setDetalhe(null); return; }
+    toast("Liberado para reenvio", "success");
+    setDetalhe(data);
+    carregar();
   };
 
   // Exclui o alvará (qualquer status, inclusive 'enviado') + o PDF no bucket.
@@ -3057,7 +3087,10 @@ function PainelAlvaras({ T, toast, user }) {
         const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
         const semEmail = !a.email_destino;
         const enviado = a.status === "enviado";
-        const bloqueado = enviado || semEmail || enviando;
+        // 'enviando' gravado no banco e nenhum envio em curso nesta tela:
+        // o envio foi interrompido no meio (aba fechada, queda de rede…).
+        const travado = a.status === "enviando" && !enviando;
+        const bloqueado = enviado || semEmail || enviando || a.status === "enviando";
         return (
           <div onClick={() => setDetalhe(null)}
             style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex",
@@ -3113,6 +3146,20 @@ function PainelAlvaras({ T, toast, user }) {
                       padding:"12px 14px", fontSize:12, color:T.text, fontFamily:"inherit", lineHeight:1.5, resize:"vertical" }} />
                 </div>
 
+                {travado && (
+                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:"1px solid #2b6cb0" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>Envio interrompido</div>
+                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
+                      Este alvará ficou marcado como “enviando”. Confira na pasta de enviados de contato@martinscorreadasilva.com.br
+                      se o e-mail saiu. Só libere para reenvio se ele <strong>não</strong> saiu.
+                    </div>
+                    <button onClick={() => liberarReenvio(a)}
+                      style={{ background:"transparent", border:"1px solid #2b6cb0", color:"#2b6cb0", borderRadius:9, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      Não saiu — liberar para reenvio
+                    </button>
+                  </div>
+                )}
+
                 {semEmail && !enviado && (
                   <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
@@ -3148,7 +3195,7 @@ function PainelAlvaras({ T, toast, user }) {
                       border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700,
                       cursor: bloqueado ? "not-allowed" : "pointer" }}>
                     <Icon name="mail" size={15} color={bloqueado ? T.textMuted : "#1B2A4A"} />
-                    {enviado ? "Já enviado" : enviando ? "Enviando…" : "Enviar"}
+                    {enviado ? "Já enviado" : (enviando || a.status === "enviando") ? "Enviando…" : "Enviar"}
                   </button>
                 </div>
               </div>
