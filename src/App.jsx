@@ -184,6 +184,47 @@ function _desconectarRealtime() {
   }
 }
 
+// ─── Versão publicada + aviso de versão nova (v49) ──────────────────────────
+// Uma aba aberta antes de uma atualização continua com o código antigo até ser
+// recarregada. Ao voltar para o app (foco/visibilidade) e a cada 15 min, busca
+// o index.html publicado e compara o bundle com o que está rodando. Se mudou,
+// mostra a faixa "Atualizar" — sem recarregar sozinho (não perde formulário).
+/* global __APP_VERSAO__, __APP_BUILD__ -- injetadas pelo vite.config.js (define) */
+const APP_VERSAO = typeof __APP_VERSAO__ !== "undefined" ? __APP_VERSAO__ : "dev";
+const APP_BUILD = typeof __APP_BUILD__ !== "undefined" ? __APP_BUILD__ : "";
+function _bundleAtual() {
+  const el = document.querySelector('script[type="module"][src*="/assets/index-"]');
+  const m = el && el.getAttribute("src").match(/\/assets\/index-[\w-]+\.js/);
+  return m ? m[0] : null;
+}
+function useNovaVersao() {
+  const [nova, setNova] = useState(false);
+  useEffect(() => {
+    const atual = _bundleAtual();
+    if (!atual) return; // ambiente de desenvolvimento (vite dev): nada a comparar
+    let ultima = 0;
+    const checar = async () => {
+      if (document.visibilityState === "hidden" || Date.now() - ultima < 60000) return;
+      ultima = Date.now();
+      try {
+        const html = await (await fetch("/?_v=" + Date.now(), { cache: "no-store" })).text();
+        const m = html.match(/\/assets\/index-[\w-]+\.js/);
+        if (m && m[0] !== atual) setNova(true);
+      } catch { /* sem rede: tenta na próxima */ }
+    };
+    const t = setInterval(checar, 15 * 60 * 1000);
+    document.addEventListener("visibilitychange", checar);
+    window.addEventListener("focus", checar);
+    checar();
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", checar);
+      window.removeEventListener("focus", checar);
+    };
+  }, []);
+  return nova;
+}
+
 // ─── Hook unificado: lê/escreve no estado global + localStorage ─────────────
 function useStorage(fullKey, initial) {
   const key = _normKey(fullKey);
@@ -3535,6 +3576,7 @@ export default function App() {
   const [concluidosAbertos, setConcluidosAbertos] = useState(false);
   const [confirmDuplasPrazo, setConfirmDuplasPrazo] = useState(null); // { existentes, form } — alerta de prazo duplicado
   const [resumoAberto, setResumoAberto] = useState(false);
+  const novaVersao = useNovaVersao();
   const [gerirTipos, setGerirTipos]     = useState(false);
   const [novoTipoInput, setNovoTipoInput] = useState("");
   const [emailDest, setEmailDest]       = useStorage("mcs.email", "contato@martinscorreadasilva.com.br");
@@ -4412,6 +4454,10 @@ export default function App() {
                 <Icon name={ico} size={18} color={T.textSoft} />{lbl}
               </button>
             ))}
+            <div title={APP_BUILD ? "Publicada em " + new Date(APP_BUILD).toLocaleString("pt-BR") : undefined}
+              style={{ padding:"14px 14px 6px", fontSize:12, color:T.textMuted }}>
+              Versão {APP_VERSAO}{APP_BUILD ? ` · ${new Date(APP_BUILD).toLocaleDateString("pt-BR")}` : ""}
+            </div>
           </div>
         </div>
       )}
@@ -5235,6 +5281,17 @@ export default function App() {
       )}
 
       {/* ── TOASTS ── */}
+      {novaVersao && (
+        <div role="status" style={{ position:"fixed", left:12, right:12, bottom:"calc(16px + env(safe-area-inset-bottom))", zIndex:400, display:"flex", justifyContent:"center", pointerEvents:"none" }}>
+          <div style={{ pointerEvents:"all", display:"flex", alignItems:"center", gap:12, background:"#1B2A4A", color:"#fff", borderRadius:14, padding:"10px 12px 10px 16px", boxShadow:"0 8px 28px #00000040", fontSize:14, maxWidth:520 }}>
+            <span>Há uma versão nova do app.</span>
+            <button onClick={() => window.location.reload()}
+              style={{ background:"#F5C518", color:"#1B2A4A", border:"none", borderRadius:10, padding:"8px 14px", fontSize:14, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+              Atualizar
+            </button>
+          </div>
+        </div>
+      )}
       <ToastContainer toasts={toasts} T={T} />
     </div>
   );
