@@ -2043,6 +2043,24 @@ function tipoDoc(d) {
   return n === 14 ? "CNPJ" : n === 11 ? "CPF" : "DESCONHECIDO";
 }
 
+// Conferência antes do envio — ESPELHO de conferirAlvara() em
+// supabase/functions/_shared/enriquecimento.ts (o servidor também bloqueia).
+function conferirAlvara(a) {
+  const bloqueios = [], avisos = [];
+  const bruto = a.valor_bruto_centavos ?? 0, despesa = a.despesa_bancaria_centavos ?? 0;
+  const ir = a.imposto_renda_centavos ?? 0, liquido = a.valor_liquido_creditado_centavos ?? 0;
+  if (bruto <= 0) bloqueios.push("Valor bruto zerado ou ausente — a extração provavelmente falhou");
+  if (despesa < 0) bloqueios.push("Despesa bancária negativa");
+  if (ir < 0) bloqueios.push("Imposto de renda negativo");
+  if (liquido !== bruto - despesa - ir) bloqueios.push("Valor líquido não bate com bruto − despesa − IR");
+  if (bruto > 0 && liquido <= 0) bloqueios.push("Valor líquido zerado ou negativo");
+  if (!a.documento_valido) avisos.push("CNPJ/CPF com dígito verificador inválido ou não identificado");
+  if (!a.data_creditamento) avisos.push("Data do creditamento não encontrada no PDF");
+  if (!(a.processo || "").trim()) avisos.push("Número do processo não encontrado");
+  if (!(a.numero_alvara || "").trim()) avisos.push("Número do alvará não encontrado");
+  return { bloqueios, avisos };
+}
+
 // Prévia do e-mail — espelha o corpo montado pela função enviar-alvara (Passo 6).
 function corpoEmailAlvara(a) {
   return [
@@ -3090,7 +3108,8 @@ function PainelAlvaras({ T, toast, user }) {
         // 'enviando' gravado no banco e nenhum envio em curso nesta tela:
         // o envio foi interrompido no meio (aba fechada, queda de rede…).
         const travado = a.status === "enviando" && !enviando;
-        const bloqueado = enviado || semEmail || enviando || a.status === "enviando";
+        const conf = conferirAlvara(a);
+        const bloqueado = enviado || semEmail || enviando || a.status === "enviando" || conf.bloqueios.length > 0;
         return (
           <div onClick={() => setDetalhe(null)}
             style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex",
@@ -3145,6 +3164,20 @@ function PainelAlvaras({ T, toast, user }) {
                     style={{ width:"100%", boxSizing:"border-box", background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10,
                       padding:"12px 14px", fontSize:12, color:T.text, fontFamily:"inherit", lineHeight:1.5, resize:"vertical" }} />
                 </div>
+
+                {!enviado && (conf.bloqueios.length > 0 || conf.avisos.length > 0) && (
+                  <div style={{ borderRadius:10, padding:"12px 14px",
+                    background: conf.bloqueios.length ? T.dangerSoft : T.cardAlt,
+                    border: `1px solid ${conf.bloqueios.length ? T.danger : "#B8860B"}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color: conf.bloqueios.length ? T.danger : T.text, marginBottom:6 }}>
+                      {conf.bloqueios.length ? "Envio bloqueado — confira o PDF" : "Confira no PDF antes de enviar"}
+                    </div>
+                    <ul style={{ margin:0, paddingLeft:18, fontSize:12, color:T.text, lineHeight:1.5 }}>
+                      {conf.bloqueios.map(m => <li key={m} style={{ color:T.danger, fontWeight:600 }}>{m}</li>)}
+                      {conf.avisos.map(m => <li key={m}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
 
                 {travado && (
                   <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:"1px solid #2b6cb0" }}>

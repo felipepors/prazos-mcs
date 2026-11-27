@@ -8,6 +8,7 @@
 // em especial o líquido R$ 19.142,00.
 
 import {
+  conferirAlvara,
   dataBRparaISO,
   dataExtensoParaISO,
   enriquecer,
@@ -98,4 +99,29 @@ Deno.test("validadores de dígito verificador", () => {
   assert(validarCPF("52998224725"), "CPF válido");
   assert(!validarCPF("52998224724"), "CPF inválido");
   assert(!validarCNPJ("11111111111111"), "CNPJ repetido inválido");
+});
+
+Deno.test("conferência: o fixture real passa sem bloqueios nem avisos", () => {
+  const c = conferirAlvara(enriquecer(FIXTURE_CRU));
+  assertEquals(c.bloqueios.length, 0, "bloqueios");
+  assertEquals(c.avisos.length, 0, "avisos");
+});
+
+Deno.test("conferência: extração vazia (bruto 0) bloqueia o envio", () => {
+  const c = conferirAlvara(enriquecer({ ...FIXTURE_CRU, valor_alvara: "" }));
+  assert(c.bloqueios.some((b) => b.includes("bruto zerado")), "bloqueia bruto zerado");
+});
+
+Deno.test("conferência: líquido negativo ou inconsistente bloqueia", () => {
+  const neg = conferirAlvara(enriquecer({ ...FIXTURE_CRU, valor_alvara: "5,00" }));
+  assert(neg.bloqueios.some((b) => b.includes("negativo")), "líquido negativo");
+  const r = enriquecer(FIXTURE_CRU);
+  const inc = conferirAlvara({ ...r, valor_liquido_creditado_centavos: r.valor_liquido_creditado_centavos + 1 });
+  assert(inc.bloqueios.some((b) => b.includes("não bate")), "líquido inconsistente");
+});
+
+Deno.test("conferência: documento inválido e data ausente só avisam", () => {
+  const c = conferirAlvara(enriquecer({ ...FIXTURE_CRU, beneficiario_doc: "19.009.309/0001-71", data_creditamento: "" }));
+  assertEquals(c.bloqueios.length, 0, "não bloqueia");
+  assertEquals(c.avisos.length, 2, "dois avisos");
 });

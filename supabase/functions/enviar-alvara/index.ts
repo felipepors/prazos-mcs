@@ -11,7 +11,7 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { formatarCentavosBRL } from "../_shared/enriquecimento.ts";
+import { conferirAlvara, formatarCentavosBRL } from "../_shared/enriquecimento.ts";
 import { autorizarEmail } from "../_shared/autorizacao.ts";
 
 const REMETENTE = Deno.env.get("LOCAWEB_SMTP_USER") ?? "contato@martinscorreadasilva.com.br";
@@ -96,6 +96,11 @@ Deno.serve(async (req) => {
     }
     if (!alvara.email_destino) {
       return json({ error: "Prestador sem e-mail cadastrado. Cadastre antes de enviar." }, 400);
+    }
+    // Regra de ouro nº 4: a conferência dos valores é código, não modelo.
+    const conf = conferirAlvara(alvara);
+    if (conf.bloqueios.length > 0) {
+      return json({ error: `Envio bloqueado: ${conf.bloqueios.join("; ")}`, bloqueios: conf.bloqueios }, 422);
     }
 
     // Monta o corpo: bruto E líquido, data do creditamento, conta.

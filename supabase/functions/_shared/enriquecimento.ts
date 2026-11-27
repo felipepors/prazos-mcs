@@ -162,6 +162,57 @@ export function dataExtensoParaISO(s: string): string {
   return `${m[3]}-${mes}-${m[1].padStart(2, "0")}`;
 }
 
+// --- Conferência antes do envio --------------------------------------------
+
+/** Campos de um alvará gravado (linha de `alvaras`) usados na conferência. */
+export interface AlvaraParaConferir {
+  valor_bruto_centavos?: number | null;
+  despesa_bancaria_centavos?: number | null;
+  imposto_renda_centavos?: number | null;
+  valor_liquido_creditado_centavos?: number | null;
+  documento_valido?: boolean | null;
+  data_creditamento?: string | null;
+  processo?: string | null;
+  numero_alvara?: string | null;
+}
+
+export interface Conferencia {
+  /** Impedem o envio: o aviso sairia com valor errado. */
+  bloqueios: string[];
+  /** Não impedem, mas pedem conferência humana no PDF. */
+  avisos: string[];
+}
+
+/**
+ * Regras determinísticas que separam "extração boa" de "extração falhou".
+ * Uma transcrição vazia vira 0 centavos em parseValorParaCentavos — sem esta
+ * conferência, um aviso com "Valor bruto: R$ 0,00" podia ser enviado.
+ * ESPELHADA em src/App.jsx (conferirAlvara) — manter as duas em sincronia.
+ */
+export function conferirAlvara(a: AlvaraParaConferir): Conferencia {
+  const bloqueios: string[] = [];
+  const avisos: string[] = [];
+  const bruto = a.valor_bruto_centavos ?? 0;
+  const despesa = a.despesa_bancaria_centavos ?? 0;
+  const ir = a.imposto_renda_centavos ?? 0;
+  const liquido = a.valor_liquido_creditado_centavos ?? 0;
+
+  if (bruto <= 0) bloqueios.push("Valor bruto zerado ou ausente — a extração provavelmente falhou");
+  if (despesa < 0) bloqueios.push("Despesa bancária negativa");
+  if (ir < 0) bloqueios.push("Imposto de renda negativo");
+  if (liquido !== bruto - despesa - ir) {
+    bloqueios.push("Valor líquido não bate com bruto − despesa − IR");
+  }
+  if (bruto > 0 && liquido <= 0) bloqueios.push("Valor líquido zerado ou negativo");
+
+  if (!a.documento_valido) avisos.push("CNPJ/CPF com dígito verificador inválido ou não identificado");
+  if (!a.data_creditamento) avisos.push("Data do creditamento não encontrada no PDF");
+  if (!(a.processo ?? "").trim()) avisos.push("Número do processo não encontrado");
+  if (!(a.numero_alvara ?? "").trim()) avisos.push("Número do alvará não encontrado");
+
+  return { bloqueios, avisos };
+}
+
 // --- Orquestração ----------------------------------------------------------
 
 export function enriquecer(e: AlvaraExtraido): AlvaraEnriquecido {
