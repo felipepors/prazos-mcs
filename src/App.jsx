@@ -2543,7 +2543,9 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
     const q = busca.trim().toLowerCase();
     const qDig = q.replace(/\D/g, "");
     return items.filter((i) => {
-      if (fStatus.size && !fStatus.has(i.status)) return false;
+      // v46 — mostra exatamente os status marcados. Antes, nenhum marcado = "todos",
+      // e a lista exibia lidas/arquivadas com os botões aparentemente desligados.
+      if (!fStatus.has(i.status)) return false;
       if (fTrib && i.tribunal !== fTrib) return false;
       if (fUrg && i.urgencia !== fUrg) return false;
       if (q) {
@@ -2597,10 +2599,12 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
     return () => { vivo = false; };
   }, [items]);
 
+  // v46 — marcado = preenchido (azul-marinho no claro, dourado no escuro), visível
+  // no celular; o creme anterior quase não se distinguia do branco.
   const chip = (ativo) => ({
-    border: `1px solid ${ativo ? "#F5C518" : T.border}`,
-    background: ativo ? "#FFF8E1" : T.card,
-    color: ativo ? "#7A5B00" : T.textMuted,
+    border: `1px solid ${ativo ? T.primary : T.border}`,
+    background: ativo ? T.primary : T.card,
+    color: ativo ? T.primaryText : T.textMuted,
     borderRadius: 14, padding: "4px 10px", fontSize: 12,
     fontWeight: ativo ? 700 : 500, cursor: "pointer",
   });
@@ -2689,7 +2693,9 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
       {loading && <div style={{ color: T.textMuted, fontSize: 13, padding: 20 }}>Carregando…</div>}
       {!loading && filtradas.length === 0 && (
         <div style={{ color: T.textMuted, fontSize: 13, padding: 20 }}>
-          Nenhuma intimação para os filtros atuais.
+          {fStatus.size === 0
+            ? "Nenhum status selecionado — toque em Novas, Lidas ou Arquivadas."
+            : "Nenhuma intimação para os filtros atuais."}
         </div>
       )}
 
