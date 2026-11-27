@@ -2061,6 +2061,12 @@ function conferirAlvara(a) {
   return { bloqueios, avisos };
 }
 
+// CPF/CNPJ lido do PDF é confiável o bastante para virar cadastro de prestador?
+function docReconhecido(a) {
+  const n = soDigitos(a.documento).length;
+  return (n === 11 || n === 14) && !!a.documento_valido;
+}
+
 // Prévia do e-mail — espelha o corpo montado pela função enviar-alvara (Passo 6).
 function corpoEmailAlvara(a) {
   return [
@@ -2890,6 +2896,9 @@ function PainelAlvaras({ T, toast, user }) {
   const [subindo, setSubindo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [emailNovo, setEmailNovo] = useState("");
+  // Guardados com o id do alvará: trocar de alvará volta ao padrão sozinho.
+  const [editandoEmailId, setEditandoEmailId] = useState(null);  // "Trocar destinatário" aberto
+  const [soNesteAlvaraId, setSoNesteAlvaraId] = useState(null);  // não gravar no cadastro de prestadores
   const [verPrestadores, setVerPrestadores] = useState(false);
   const [arrastando, setArrastando] = useState(false);
   const fileRef = useRef(null);
@@ -2954,10 +2963,19 @@ function PainelAlvaras({ T, toast, user }) {
     const email = emailNovo.trim();
     if (!email.split(/[,;]+/).some(e => /.+@.+\..+/.test(e.trim()))) { toast("Informe pelo menos um e-mail válido", "danger"); return; }
     const digits = (detalhe.documento || "").replace(/\D/g, "");
-    if (digits.length !== 11 && digits.length !== 14) {
-      toast("Documento não identificado neste alvará", "danger"); return;
-    }
     const sb = await initSupabase();
+    // CPF/CNPJ não reconhecido no PDF (ou o Felipe escolheu "só neste alvará"):
+    // grava o e-mail SÓ neste alvará, sem criar cadastro com documento errado.
+    if (!docReconhecido(detalhe) || soNesteAlvaraId === detalhe.id) {
+      const { error: upErr } = await sb.from("alvaras")
+        .update({ email_destino: email, prestador_id: null }).eq("id", detalhe.id);
+      if (upErr) { toast("Falha ao salvar e-mail: " + upErr.message, "danger"); return; }
+      toast("E-mail definido para este alvará", "success");
+      setDetalhe({ ...detalhe, email_destino: email, prestador_id: null });
+      setEditandoEmailId(null); setEmailNovo("");
+      carregar();
+      return;
+    }
     const { data: prest, error } = await sb.from("prestadores")
       .upsert(
         { user_id: user.id, documento: digits, documento_tipo: detalhe.documento_tipo, nome: detalhe.prestador, email },
@@ -2970,6 +2988,7 @@ function PainelAlvaras({ T, toast, user }) {
     if (upErr) { toast("Falha ao vincular: " + upErr.message, "danger"); return; }
     toast("E-mail do prestador cadastrado", "success");
     setDetalhe({ ...detalhe, email_destino: email, prestador_id: prest.id });
+    setEditandoEmailId(null); setEmailNovo("");
     carregar();
   };
 
@@ -3104,6 +3123,8 @@ function PainelAlvaras({ T, toast, user }) {
         const a = detalhe;
         const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
         const semEmail = !a.email_destino;
+        const editandoEmail = editandoEmailId === a.id;
+        const reconhecido = docReconhecido(a);
         const enviado = a.status === "enviado";
         // 'enviando' gravado no banco e nenhum envio em curso nesta tela:
         // o envio foi interrompido no meio (aba fechada, queda de rede…).
@@ -3193,12 +3214,30 @@ function PainelAlvaras({ T, toast, user }) {
                   </div>
                 )}
 
-                {semEmail && !enviado && (
+                {!semEmail && !enviado && !editandoEmail && a.status !== "enviando" && (
+                  <button onClick={() => { setEditandoEmailId(a.id); setEmailNovo(a.email_destino || ""); }}
+                    style={{ alignSelf:"flex-start", background:"none", border:"none", padding:0, color:T.primary, fontSize:12, fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>
+                    Trocar destinatário
+                  </button>
+                )}
+
+                {(semEmail || editandoEmail) && !enviado && (
                   <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
-                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
-                      Informe o(s) e-mail(s) do prestador para habilitar o envio (fica salvo para os próximos alvarás). Para múltiplos destinatários, separe por vírgula.
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>
+                      {editandoEmail ? "Trocar destinatário" : reconhecido ? "CNPJ/CPF sem e-mail cadastrado" : "CPF/CNPJ não reconhecido no PDF"}
                     </div>
+                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
+                      {reconhecido
+                        ? "Informe o(s) e-mail(s) do prestador para habilitar o envio. Para múltiplos destinatários, separe por vírgula."
+                        : `O documento lido do PDF (${a.documento || "nenhum"}) não é um CPF/CNPJ válido, então não dá para usar o cadastro. Informe o(s) e-mail(s): valem só para este alvará.`}
+                    </div>
+                    {reconhecido && (
+                      <label style={{ display:"flex", alignItems:"center", gap:7, fontSize:12, color:T.text, marginBottom:8, cursor:"pointer" }}>
+                        <input type="checkbox" checked={soNesteAlvaraId !== a.id}
+                          onChange={e => setSoNesteAlvaraId(e.target.checked ? null : a.id)} />
+                        Salvar no cadastro de {a.documento_tipo} {fmtDoc(a.documento)} para os próximos alvarás
+                      </label>
+                    )}
                     <div style={{ display:"flex", gap:8 }}>
                       <input value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br ou email1, email2"
                         style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text }} />
@@ -3206,6 +3245,12 @@ function PainelAlvaras({ T, toast, user }) {
                         style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"0 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         Salvar
                       </button>
+                      {editandoEmail && (
+                        <button onClick={() => { setEditandoEmailId(null); setEmailNovo(""); }}
+                          style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:9, padding:"0 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                          Cancelar
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
