@@ -51,6 +51,9 @@ supabase link --project-ref frprebgyfnbeetuwmrzd
 # gravar os segredos (eles NÃO vão para o Git)
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...           # a chave do passo 1
 supabase secrets set LOCAWEB_SMTP_PASS=...                  # a senha da caixa (Passo 6)
+supabase secrets set EMAILS_AUTORIZADOS=seu-login@exemplo    # e-mail(s) de login autorizados a processar/enviar alvarás
+# opcional — cópia oculta dos avisos (padrão: contato@correadasilvamartins.com.br; "-" desliga)
+# supabase secrets set ALVARA_EMAIL_BCC=contato@correadasilvamartins.com.br
 
 # conferir (mostra só os nomes, nunca os valores)
 supabase secrets list

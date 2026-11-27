@@ -12,6 +12,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { formatarCentavosBRL } from "../_shared/enriquecimento.ts";
+import { autorizarEmail } from "../_shared/autorizacao.ts";
 
 const REMETENTE = Deno.env.get("LOCAWEB_SMTP_USER") ?? "contato@martinscorreadasilva.com.br";
 
@@ -65,6 +66,8 @@ Deno.serve(async (req) => {
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Usuario nao autenticado" }, 401);
+    const autz = autorizarEmail(userData.user.email);
+    if (!autz.ok) return json({ error: autz.erro }, autz.status);
 
     const reqBody = await req.json().catch(() => ({}));
     const alvara_id = reqBody.alvara_id;

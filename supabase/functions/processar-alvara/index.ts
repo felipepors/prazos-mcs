@@ -19,6 +19,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { extrairAlvara } from "../_shared/extracao.ts";
 import { enriquecer } from "../_shared/enriquecimento.ts";
+import { autorizarEmail } from "../_shared/autorizacao.ts";
 
 const BUCKET = "alvaras";
 
@@ -55,6 +56,8 @@ Deno.serve(async (req) => {
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Usuario nao autenticado" }, 401);
+    const autz = autorizarEmail(userData.user.email);
+    if (!autz.ok) return json({ error: autz.erro }, autz.status);
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));

@@ -309,14 +309,8 @@ async function fazerLogin(email, senha) {
   if (error) throw _mapAuthError(error);
   return data;
 }
-async function criarConta(email, senha) {
-  if (!SUPABASE_ATIVO) throw new Error("Supabase não configurado");
-  const sb = await initSupabase();
-  if (!sb) throw new Error("Supabase indisponível");
-  const { data, error } = await sb.auth.signUp({ email, password: senha });
-  if (error) throw _mapAuthError(error);
-  return data;
-}
+// Cadastro de conta pelo app removido: o cadastro está fechado no Supabase Auth
+// (v31b, 02/08). Conta nova só pelo painel do Supabase → Authentication → Add user.
 async function fazerLogout() {
   if (!SUPABASE_ATIVO) return;
   const sb = await initSupabase();
@@ -1136,15 +1130,13 @@ function ListaTarefas({ tarefas, setTarefas, onEdit, onDelete, onToggle, T, modo
 function TelaLogin({ T, modo, onToast }) {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [criando, setCriando] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
   const submeter = async () => {
     setErro(""); setLoading(true);
     try {
-      if (criando) await criarConta(email, senha);
-      else await fazerLogin(email, senha);
+      await fazerLogin(email, senha);
     } catch (e) {
       const msgs = {
         "auth/invalid-email":     "E-mail inválido",
@@ -1184,7 +1176,7 @@ function TelaLogin({ T, modo, onToast }) {
           {erro && <div style={{ background:T.dangerSoft, border:`1px solid ${T.danger}33`, color:T.danger, borderRadius:8, padding:"8px 12px", fontSize:12 }}>{erro}</div>}
           <button onClick={submeter} disabled={loading || !email || !senha}
             style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
-            {loading ? "Aguarde..." : criando ? "Criar conta" : "Entrar"}
+            {loading ? "Aguarde..." : "Entrar"}
           </button>
           {/* v31b — cadastro fechado no Supabase (02/08): link "Criar uma" removido. Conta nova: painel do Supabase → Add user. */}
         </div>
