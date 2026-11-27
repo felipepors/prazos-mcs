@@ -417,6 +417,7 @@ const ORDENACAO_OPTS = [
 const Icon = ({ name, size=18, color="currentColor" }) => {
   const icons = {
     scale:    <path d="M12 3v18M3 7h18M5 7l3 9a3 3 0 006 0l3-9M5 7l-2 5a2 2 0 004 0l-2-5zM19 7l-2 5a2 2 0 004 0l-2-5z" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    lock:     <><rect x="5" y="11" width="14" height="10" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M8 11V8a4 4 0 018 0v3" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round"/></>,
     copy:     <><rect x="9" y="9" width="11" height="11" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M5 15V6a2 2 0 012-2h9" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round"/></>,
     undo:     <path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
     plus:     <path d="M12 5v14M5 12h14" stroke={color} strokeWidth="2" strokeLinecap="round"/>,
@@ -2224,6 +2225,29 @@ const INTIM_URG = {
   baixa: { c:"#4B5563", bg:"#EDF0F4" },
 };
 const INTIM_DEOAB_BADGE = { c:"#7A5B00", bg:"#FFFBEB" };
+const INTIM_URG_DARK = {
+  alta:  { c:"#F7C1C1", bg:"#791F1F66" },
+  media: { c:"#FAE3B8", bg:"#854F0B66" },
+  baixa: { c:"#D3DAE8", bg:"#3D507866" },
+};
+const INTIM_DEOAB_DARK = { c:"#1B2A4A", bg:"#F5C518" };
+const INTIM_STATUS_UM = { LIDO:"Lida", TRATADO:"Tratada", IGNORADO:"Ignorada" };
+// v43 — título do dia: "Hoje", "Ontem" ou o dia da semana, e a data por extenso
+function intimTituloDia(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!m) return { titulo: String(iso || "—"), sub: "" };
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const dif = Math.round((hoje - d) / 86400000);
+  const SEM = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+  const MES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const ano = d.getFullYear() !== hoje.getFullYear() ? ` de ${d.getFullYear()}` : "";
+  const data = `${d.getDate()} de ${MES[d.getMonth()]}${ano}`;
+  if (dif === 0) return { titulo: "Hoje", sub: `${SEM[d.getDay()]}, ${data}` };
+  if (dif === 1) return { titulo: "Ontem", sub: `${SEM[d.getDay()]}, ${data}` };
+  const s = SEM[d.getDay()];
+  return { titulo: s.charAt(0).toUpperCase() + s.slice(1), sub: data };
+}
 const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
 
 const CORES_TRIBUNAL={DEOAB:['#1B2A4A','#F5C518'],TJRS:['#1B5E20','#E3F2E4'],TJRJ:['#B23A00','#FCE9DE'],TJSP:['#7B1FA2','#F3E5F8'],TJSC:['#546E7A','#ECEFF1'],TJPR:['#AD1457','#FCE4EC'],TJDFT:['#4527A0','#EAE4F7'],TJDF:['#4527A0','#EAE4F7'],TRF4:['#01579B','#E1F0FA'],TJMG:['#795548','#EFE7E4'],TJBA:['#C62828','#FCE4E4'],TJGO:['#0277BD','#E0F2FB'],TJCE:['#00838F','#DCF2F4'],TJPE:['#558B2F','#EDF4E2'],TJPA:['#283593','#E4E7F5'],TJMA:['#6A1B9A','#F0E4F7'],TJMT:['#00796B','#DDF1EE'],TJSE:['#BF360C','#FBE6DE'],TJES:['#AD5A00','#FBEEDD'],TJPB:['#33691E','#EAF2DF'],TJRN:['#880E4F','#FBE2EE'],TJAL:['#0D47A1','#E2ECFA'],TJPI:['#4E342E','#EDE6E4'],TJMS:['#00600F','#DEEFE1'],TJAM:['#1A237E','#E3E5F3'],STJ:['#8E1A2F','#F7E4E7'],STF:['#212121','#EAEAEA'],TST:['#455A64','#E8EDEF'],TSE:['#5D4037','#EDE7E4'],TRF1:['#0288D1','#E0F3FB'],TRF2:['#00897B','#DDF2EF'],TRF3:['#5E35B1','#ECE5F7'],TRF5:['#C2185B','#FBE4EC'],TRF6:['#004D40','#DBEFEA']};
@@ -2319,7 +2343,7 @@ function useIntimacoes(userId) {
   return { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais };
 }
 
-function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContagem }) {
+function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onContagem }) {
   const { items, setItems, clientes, setClientes, loading, ultimaColeta, carregar, carregarMais, temMais } = useIntimacoes(user?.id);
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
@@ -2593,52 +2617,131 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
         </div>
       )}
 
-      {porDia.map(([dia, lista]) => (
-        <div key={dia} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: ".04em", textTransform: "uppercase", margin: "10px 0 6px" }}>
-            {intimDataBR(dia)} · {lista.length}
+      {porDia.map(([dia, lista]) => {
+        const td = intimTituloDia(dia);
+        const nNovas = lista.filter((x) => x.status === "NOVO").length;
+        return (
+        <div key={dia} style={{ marginBottom: 18 }}>
+          {/* v43 — título do dia em destaque, com a contagem de novas */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 2px 10px" }}>
+            <span aria-hidden="true" style={{ width: 4, alignSelf: "stretch", minHeight: 26, borderRadius: 2, background: "#F5C518", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "0 10px" }}>
+              <span style={{ fontSize: 19, fontWeight: 700, color: T.text }}>{td.titulo}</span>
+              {td.sub && <span style={{ fontSize: 15, color: T.textSoft }}>{td.sub}</span>}
+            </div>
+            <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {nNovas > 0 && (
+                <span style={{ fontSize: 14, fontWeight: 700, background: T.primary, color: T.primaryText, padding: "4px 12px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                  {nNovas} {nNovas === 1 ? "nova" : "novas"}
+                </span>
+              )}
+              <span style={{ fontSize: 13, color: T.textSoft, whiteSpace: "nowrap" }}>
+                {nNovas > 0 ? `de ${lista.length}` : `${lista.length} ${lista.length === 1 ? "intimação" : "intimações"}`}
+              </span>
+            </span>
           </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {lista.map((i) => {
+            const escuro = modo === "dark";
             const deoab = i.tribunal === "DEOAB";
-            const urg = deoab ? INTIM_DEOAB_BADGE : (INTIM_URG[i.urgencia] || INTIM_URG.baixa);
+            const urg = deoab
+              ? (escuro ? INTIM_DEOAB_DARK : INTIM_DEOAB_BADGE)
+              : ((escuro ? INTIM_URG_DARK : INTIM_URG)[i.urgencia] || (escuro ? INTIM_URG_DARK : INTIM_URG).baixa);
+            const nova = i.status === "NOVO";
             const tratada = i.status === "TRATADO" || i.status === "IGNORADO";
+            const sigiloso = i.classificacao === "SIGILOSO" || /^processo sigiloso/i.test(i.trecho || "") || /^processo sigiloso/i.test(i.rotulo || "");
+            const cliente = clientes[i.numero_processo];
+            const partesOk = i.partes && !/SIGILO/i.test(i.partes) ? i.partes : "";
+            const semCliente = !cliente && !partesOk && !deoab;
+            const titulo = cliente || partesOk || (deoab ? "Publicação da OAB" : "Cliente não cadastrado");
+            const categoria = sigiloso ? "Sigiloso — abrir nos autos" : (i.rotulo || i.classificacao || "Sem classificação");
+            const corProc = escuro ? "#85B7EB" : "#185FA5";
+            const tc = i.tribunal ? corTribunal(i.tribunal) : null;
+            const parar = (e) => e.stopPropagation();
             return (
               <div key={i.id} onClick={() => setDetalhe(i)}
                 style={{
-                  background: T.card, border: `1px solid ${T.border}`,
-                  borderLeft: `3px solid ${deoab ? "#F5C518" : (i.urgencia === "alta" ? "#B00020" : T.border)}`,
-                  borderRadius: 8, padding: "10px 12px", marginBottom: 8,
-                  cursor: "pointer", opacity: tratada ? 0.55 : 1,
+                  background: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
+                  padding: 16, cursor: "pointer", opacity: tratada ? 0.75 : 1,
+                  display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "0 1px 3px #0000000a",
                 }}>
-                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{i.numero_processo || (deoab ? "Publicação da OAB" : "—")}</span>
-                  {i.tribunal && <Badge color={corTribunal(i.tribunal).c} bg={corTribunal(i.tribunal).bg}>{i.tribunal}</Badge>}
-                  <Badge color={urg.c} bg={urg.bg}>{i.rotulo || i.classificacao}</Badge>
-                  {i.requer_conferencia && <Badge color="#7A5B00" bg="#FFF3CD">⚠ conferir</Badge>}
-                  {i.status !== "NOVO" && <Badge color={T.textMuted} bg={T.card}>{INTIM_STATUS_LABEL[i.status] || i.status}</Badge>}
-                  {i.prazo_id && <Badge color="#1e7d46" bg="#E6F4EA">✓ prazo</Badge>}
-                </div>
-                <div style={{ fontSize: 12, color: T.text, marginTop: 4 }}>
-                  {clientes[i.numero_processo]
-                    ? <span style={{ fontWeight: 600 }}>{clientes[i.numero_processo]}</span>
-                    : (i.partes || "—")}
-                </div>
-                {i.nome_orgao && <div style={{ fontSize: 12, color: T.textSoft, marginTop: 2 }}>{i.nome_orgao}</div>}
-                {i.trecho && !(i.classificacao === "SIGILOSO" || /^processo sigiloso/i.test(i.trecho)) && (
-                  <div style={{ fontSize: 12, color: T.textSoft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                    {i.trecho}
+                <span aria-label={nova ? "Nova" : undefined}
+                  style={{ width: 10, height: 10, borderRadius: "50%", marginTop: 7, flexShrink: 0, background: nova ? (escuro ? "#85B7EB" : "#185FA5") : "transparent" }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "2px 10px" }}>
+                    <span style={{ fontSize: 16, fontWeight: semCliente ? 500 : 600, color: semCliente ? T.textSoft : T.text, overflowWrap: "anywhere",
+                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{titulo}</span>
+                    {semCliente && i.numero_processo && (
+                      <span onClick={(e) => { parar(e); setDetalhe(i); }} role="button"
+                        style={{ fontSize: 13, fontWeight: 600, color: corProc, cursor: "pointer", whiteSpace: "nowrap" }}>+ informar cliente</span>
+                    )}
                   </div>
-                )}
-                <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
-                  {btnStatus(i, "LIDO", "Lida")}
-                  {btnStatus(i, "TRATADO", "Tratada")}
-                  {btnStatus(i, "IGNORADO", "Ignorar")}
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: urg.c, background: urg.bg, padding: "3px 12px", borderRadius: 999 }}>
+                      {sigiloso && <Icon name="lock" size={14} color={urg.c} />}{categoria}
+                    </span>
+                    {i.requer_conferencia && <Badge color={escuro ? "#FAE3B8" : "#7A5B00"} bg={escuro ? "#854F0B66" : "#FFF3CD"}>⚠ conferir</Badge>}
+                    {i.prazo_id && <Badge color={escuro ? "#9FE1CB" : "#1e7d46"} bg={escuro ? "#08504166" : "#E6F4EA"}>✓ prazo criado</Badge>}
+                  </div>
+                  {i.numero_processo && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 9 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 13, color: corProc, overflowWrap: "anywhere" }}>{i.numero_processo}</span>
+                      {tc && (
+                        <span style={escuro
+                          ? { fontSize: 12, fontWeight: 700, color: tc.bg, border: `1px solid ${T.borderStrong}`, padding: "0 7px", borderRadius: 4, whiteSpace: "nowrap" }
+                          : { fontSize: 12, fontWeight: 700, color: tc.c, background: tc.bg, padding: "1px 7px", borderRadius: 4, whiteSpace: "nowrap" }}>{i.tribunal}</span>
+                      )}
+                      <span onClick={(e) => { parar(e); try { navigator.clipboard.writeText(i.numero_processo); toast && toast("Número copiado", "success"); } catch { toast && toast("Não foi possível copiar", "danger"); } }}
+                        title="Copiar número" role="button" aria-label="Copiar número do processo" style={{ cursor: "pointer", display: "inline-flex", padding: 2 }}>
+                        <Icon name="copy" size={15} color={T.textMuted} />
+                      </span>
+                    </div>
+                  )}
+                  {!i.numero_processo && tc && (
+                    <div style={{ marginTop: 9 }}><Badge color={tc.c} bg={tc.bg}>{i.tribunal}</Badge></div>
+                  )}
+                  {i.nome_orgao && (
+                    <div style={{ fontSize: 13, color: T.textSoft, marginTop: 8, overflowWrap: "anywhere" }}>{i.nome_orgao}</div>
+                  )}
+                  {i.trecho && !sigiloso && (
+                    <div style={{ fontSize: 13, color: T.textSoft, marginTop: 11, paddingTop: 11, borderTop: `1px solid ${T.border}`, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {i.trecho}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 13, alignItems: "center", flexWrap: "wrap" }}>
+                    {nova ? (
+                      <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "LIDO" }); }}
+                        style={{ border: "none", background: T.primary, color: T.primaryText, borderRadius: 999, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name="check" size={15} color={T.primaryText} /> Marcar como lida
+                      </button>
+                    ) : (
+                      <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "NOVO" }); }}
+                        title="Voltar para nova"
+                        style={{ border: "1px solid #F5C518", background: escuro ? "transparent" : "#FFF8E1", color: escuro ? "#F5C518" : "#7A5B00", borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        ✓ {INTIM_STATUS_UM[i.status] || i.status}
+                      </button>
+                    )}
+                    {!i.prazo_id && i.status !== "IGNORADO" && (
+                      <button onClick={(e) => { parar(e); criarPrazo(i); }}
+                        style={{ border: `1.5px solid ${T.primary}`, background: "transparent", color: T.primary, borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name="calendar" size={15} color={T.primary} /> Criar prazo
+                      </button>
+                    )}
+                    {(nova || i.status === "LIDO") && (
+                      <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "IGNORADO" }); }}
+                        style={{ border: "none", background: "transparent", color: T.textSoft, padding: "8px 6px", fontSize: 13, fontWeight: 500, cursor: salvando ? "wait" : "pointer" }}>
+                        Ignorar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
+          </div>
         </div>
-      ))}
+        );
+      })}
 
       {temMais && !loading && (
         <div style={{ textAlign: "center", margin: "6px 0 14px" }}>
@@ -3943,7 +4046,7 @@ export default function App() {
       )}
 
       {/* ══ ABA ALVARÁS ══ */}
-      {aba === "intimacoes" && <PainelIntimacoes T={T} user={user} toast={toast} setForm={setForm} setModal={setModal} setAba={setAba} onContagem={atualizarNovasIntim} />}
+      {aba === "intimacoes" && <PainelIntimacoes T={T} modo={modo} user={user} toast={toast} setForm={setForm} setModal={setModal} setAba={setAba} onContagem={atualizarNovasIntim} />}
       {aba === "alvaras" && <PainelAlvaras T={T} toast={toast} user={user} />}
 
       {aba === "assinaturas" && (
