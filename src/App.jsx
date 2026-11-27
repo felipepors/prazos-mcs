@@ -116,7 +116,7 @@ async function _hidratarDoServidor() {
         _broadcast(k);
       });
     } else {
-      const KEYS = ["modo","prazos","tiposCustom","tarefas","feriados","feriadosNomes","clientes","ultimoBackup","email"];
+      const KEYS = ["modo","prazos","tiposCustom","tarefas","feriados","feriadosNomes","feriadosRemovidos","clientes","ultimoBackup","email"];
       KEYS.forEach(k => {
         try {
           const raw = window.localStorage.getItem("mcs." + k);
@@ -738,30 +738,97 @@ const INITIAL = [
   { id:4, processo:"0033333-55.2024.8.21.0003", parte:"Bradesco Saúde", tipo:"Manifestação",           dataLimite:new Date(Date.now()+18*86400000).toISOString().slice(0,10), responsavel:"Janine", concluido:true,  obs:"",                 prioridade:"baixa" },
 ];
 
-const FERIADOS_2026 = ["2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-11","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25"];
-const FERIADOS_NOMES = {"2026-01-01":"Ano Novo","2026-02-16":"Carnaval","2026-02-17":"Carnaval","2026-04-03":"Sexta-feira Santa","2026-04-21":"Tiradentes","2026-05-01":"Dia do Trabalho","2026-06-11":"Corpus Christi","2026-09-07":"Independência","2026-10-12":"Nossa Senhora Aparecida","2026-11-02":"Finados","2026-11-15":"Proclamação da República","2026-11-20":"Consciência Negra","2026-12-25":"Natal"};
-
-// Feriados nacionais 2027 + recesso forense (CPC art. 220: prazos suspensos
-// de 20/12 a 20/01 — cada dia é tratado como não-útil na contagem).
+// v47 — feriados gerados POR ANO (antes: listas fixas só de 2026 e 2027).
+// Nacionais fixos + móveis (calculados a partir da Páscoa) + Dia da Justiça
+// (08/12) + recesso forense (CPC art. 220: prazos suspensos de 20/12 a 20/01 —
+// cada dia é tratado como não-útil na contagem).
 // ATENÇÃO: feriados estaduais/municipais (ex.: 20/09 RS, 09/07 SP) NÃO entram
 // no seed — o conjunto é global e marcá-los alongaria indevidamente prazos de
 // OUTROS tribunais. Adicionar manualmente pelo modal Feriados, se necessário.
-const FERIADOS_2027 = ["2027-01-01","2027-02-08","2027-02-09","2027-03-26","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"];
-const FERIADOS_NOMES_2027 = {"2027-01-01":"Ano Novo","2027-02-08":"Carnaval","2027-02-09":"Carnaval","2027-03-26":"Sexta-feira Santa","2027-04-21":"Tiradentes","2027-05-01":"Dia do Trabalho","2027-05-27":"Corpus Christi","2027-09-07":"Independência","2027-10-12":"Nossa Senhora Aparecida","2027-11-02":"Finados","2027-11-15":"Proclamação da República","2027-11-20":"Consciência Negra","2027-12-25":"Natal"};
-function _diasRecesso(anoInicio) {
-  const out = [];
-  const d = new Date(anoInicio, 11, 20);
-  const fim = new Date(anoInicio + 1, 0, 20);
-  while (d <= fim) { out.push(isoLocal(d)); d.setDate(d.getDate() + 1); }
+const NOME_RECESSO = "Recesso forense (CPC 220)";
+const FERIADOS_FIXOS = [
+  ["01-01","Ano Novo"], ["04-21","Tiradentes"], ["05-01","Dia do Trabalho"],
+  ["09-07","Independência"], ["10-12","Nossa Senhora Aparecida"], ["11-02","Finados"],
+  ["11-15","Proclamação da República"], ["11-20","Consciência Negra"],
+  ["12-08","Dia da Justiça"], ["12-25","Natal"],
+];
+// Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher, calendário gregoriano).
+// Conferido: 2024-03-31, 2025-04-20, 2026-04-05, 2027-03-28, 2028-04-16.
+function _pascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia);
+}
+function _somaDias(data, n) { const d = new Date(data); d.setDate(d.getDate() + n); return isoLocal(d); }
+// { "AAAA-MM-DD": "nome" } com os feriados do ano + o recesso que COMEÇA nele.
+function _feriadosDoAno(ano) {
+  const out = {};
+  FERIADOS_FIXOS.forEach(([md, nome]) => { out[`${ano}-${md}`] = nome; });
+  const p = _pascoa(ano);
+  out[_somaDias(p, -48)] = "Carnaval";
+  out[_somaDias(p, -47)] = "Carnaval";
+  out[_somaDias(p, -2)]  = "Sexta-feira Santa";
+  out[_somaDias(p, 60)]  = "Corpus Christi";
+  const d = new Date(ano, 11, 20), fim = new Date(ano + 1, 0, 20);
+  while (d <= fim) {
+    const iso = isoLocal(d);
+    // Dentro do recesso, feriado fixo mantém o nome (ex.: 01/01 do ano seguinte).
+    const fixo = FERIADOS_FIXOS.find(([md]) => md === iso.slice(5));
+    if (!out[iso]) out[iso] = fixo ? fixo[1] : NOME_RECESSO;
+    d.setDate(d.getDate() + 1);
+  }
   return out;
 }
-const RECESSO_2026_27 = _diasRecesso(2026);
-const FERIADOS_SEED = [...new Set([...FERIADOS_2026, ...FERIADOS_2027, ...RECESSO_2026_27])].sort();
+// Do ano passado até dois anos à frente — renova sozinho a cada virada de ano.
 const FERIADOS_NOMES_SEED = (() => {
-  const n = { ...FERIADOS_NOMES, ...FERIADOS_NOMES_2027 };
-  RECESSO_2026_27.forEach(d => { if (!n[d]) n[d] = "Recesso forense (CPC 220)"; });
+  const ano = new Date().getFullYear();
+  const n = {};
+  for (let a = ano - 1; a <= ano + 2; a++) {
+    // Feriado com nome próprio (ex.: Ano Novo) prevalece sobre "Recesso", que
+    // chega antes pelo recesso do ano anterior (20/12 a 20/01).
+    Object.entries(_feriadosDoAno(a)).forEach(([d, nome]) => { if (!n[d] || (n[d] === NOME_RECESSO && nome !== NOME_RECESSO)) n[d] = nome; });
+  }
   return n;
 })();
+const FERIADOS_SEED = Object.keys(FERIADOS_NOMES_SEED).sort();
+// Todos os dias de "de" até "ate" (inclusive). null se inválido ou se passar de
+// maxDias (proteção contra digitar o ano errado e marcar meses como feriado).
+function _diasEntre(de, ate, maxDias = 62) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(de || "")) return null;
+  const fim = ate || de;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fim) || fim < de) return null;
+  const out = [];
+  for (let d = de; d <= fim; d = _somaDias(new Date(d + "T00:00:00"), 1)) {
+    out.push(d);
+    if (out.length > maxDias) return null;
+  }
+  return out;
+}
+// Agrupa dias seguidos para exibir: mesmo nome, ou dentro de um recesso forense
+// (o recesso "engole" Natal e Ano Novo, que ficam listados em `inclui`).
+function _agruparFeriados(datas, nomes) {
+  const grupos = [];
+  [...datas].sort().forEach(d => {
+    const nome = nomes[d] || "—";
+    const g = grupos[grupos.length - 1];
+    const seguido = g && _somaDias(new Date(g.fim + "T00:00:00"), 1) === d;
+    if (seguido && (nome === g.nome || nome === NOME_RECESSO || g.nome === NOME_RECESSO)) {
+      if (nome === NOME_RECESSO && g.nome !== NOME_RECESSO) { g.inclui.push(g.nome); g.nome = NOME_RECESSO; }
+      else if (nome !== g.nome && !g.inclui.includes(nome)) g.inclui.push(nome);
+      g.fim = d; g.dias.push(d);
+    } else {
+      grupos.push({ ini: d, fim: d, nome, inclui: [], dias: [d] });
+    }
+  });
+  return grupos;
+}
+// Datas semeadas ERRADAS em versões anteriores, removidas na próxima abertura.
+// 2026-06-11: Corpus Christi de 2026 é 04/06 (Páscoa em 05/04).
+const FERIADOS_SEED_ERRADOS = { "2026-06-11": "Corpus Christi" };
 
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENTES UI
@@ -3424,6 +3491,8 @@ export default function App() {
   ]);
   const [feriados, setFeriados]         = useStorage("mcs.feriados", FERIADOS_SEED);
   const [feriadosNomes, setFeriadosNomes] = useStorage("mcs.feriadosNomes", FERIADOS_NOMES_SEED);
+  // v47 — feriados do seed que o usuário excluiu: o seed não os recoloca.
+  const [feriadosRemovidos, setFeriadosRemovidos] = useStorage("mcs.feriadosRemovidos", []);
   const [clientes, setClientes]         = useStorage("mcs.clientes", [
     { id:1, nome:"Unimed POARS",   tipo:"PJ", obs:"Cooperativa de saúde" },
     { id:2, nome:"IPE Saúde",      tipo:"PJ", obs:"Autarquia estadual" },
@@ -3481,7 +3550,8 @@ export default function App() {
   const [kitStatus,setKitStatus]=useState("idle");
   const [kitSignUrl,setKitSignUrl]=useState("");
   const fileInputRef = useRef(null);
-  const [novoFeriado, setNovoFeriado]   = useState({ data:"", nome:"" });
+  const [novoFeriado, setNovoFeriado]   = useState({ data:"", ate:"", nome:"" });
+  const [feriadosPassados, setFeriadosPassados] = useState(false);
 
   // Toasts
   const [toasts, setToasts] = useState([]);
@@ -3508,20 +3578,24 @@ export default function App() {
   }, [user?.id]);
   useEffect(() => { setFeriadosGlobal(feriados); }, [feriados]);
 
-  // Semeia feriados novos (2027 + recesso forense) em contas que já tinham
-  // dados salvos — o seed inicial só vale para instalações novas. Efeito
-  // idempotente: converge quando nada falta. (Efeito colateral aceito:
-  // excluir um feriado do seed pelo modal o readiciona.)
+  // Semeia feriados novos (anos seguintes, recesso, Dia da Justiça) em contas
+  // que já tinham dados salvos — o seed inicial só vale para instalações novas.
+  // Efeito idempotente: converge quando nada falta. v47: respeita o que o
+  // usuário excluiu (feriadosRemovidos) e limpa datas semeadas erradas.
   useEffect(() => {
-    const faltantes = FERIADOS_SEED.filter(d => !feriados.includes(d));
-    if (faltantes.length === 0) return;
-    setFeriados(prev => [...new Set([...prev, ...FERIADOS_SEED])].sort());
+    const removidos = new Set(feriadosRemovidos || []);
+    const faltantes = FERIADOS_SEED.filter(d => !feriados.includes(d) && !removidos.has(d));
+    const errados = Object.keys(FERIADOS_SEED_ERRADOS)
+      .filter(d => feriados.includes(d) && feriadosNomes[d] === FERIADOS_SEED_ERRADOS[d] && !FERIADOS_NOMES_SEED[d]);
+    if (faltantes.length === 0 && errados.length === 0) return;
+    setFeriados(prev => [...new Set([...prev, ...faltantes])].filter(d => !errados.includes(d)).sort());
     setFeriadosNomes(prev => {
       const n = { ...prev };
-      FERIADOS_SEED.forEach(d => { if (!n[d]) n[d] = FERIADOS_NOMES_SEED[d]; });
+      faltantes.forEach(d => { if (!n[d]) n[d] = FERIADOS_NOMES_SEED[d]; });
+      errados.forEach(d => { delete n[d]; });
       return n;
     });
-  }, [feriados]);
+  }, [feriados, feriadosRemovidos]);
 
   const hoje = isoLocal();
   const todosOsTipos = [...TIPOS_DEFAULT, ...tiposCustom].sort((a,b) => a.localeCompare(b,"pt"));
@@ -3750,8 +3824,18 @@ export default function App() {
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
         input, select, textarea { font-family: inherit; }
-        input.data-vazia::-webkit-datetime-edit { color: transparent; }
-        input.data-vazia:focus::-webkit-datetime-edit { color: inherit; }
+        /* v47 — campo de data VAZIO não pode parecer preenchido. O Safari (iPhone/Mac)
+           mostra a data de hoje como sugestão, com cor própria em cada parte
+           (dia/mês/ano) — esconder só o ::-webkit-datetime-edit não bastava. */
+        input.data-vazia:not(:focus) { color: transparent; -webkit-text-fill-color: transparent; }
+        input.data-vazia:not(:focus)::-webkit-datetime-edit,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-fields-wrapper,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-text,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-day-field,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-month-field,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-year-field,
+        input.data-vazia:not(:focus)::-webkit-date-and-time-value { color: transparent; -webkit-text-fill-color: transparent; }
+        .campo-data input.data-vazia:not(:focus) { opacity: 0; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
         input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus, select:focus, textarea:focus { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
         .campo-data { position:relative; display:flex; align-items:center; gap:10px; overflow:hidden; min-height:48px; }
@@ -3759,7 +3843,7 @@ export default function App() {
         .campo-data input::-webkit-date-and-time-value { text-align:left; margin:0; }
         .campo-data input:focus { box-shadow:none !important; }
         .campo-data:focus-within { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
-        .campo-data .dica { position:absolute; left:42px; top:50%; transform:translateY(-50%); pointer-events:none; }
+        .campo-data .dica { position:absolute; left:42px; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
         .campo-data input:focus + .dica { display:none; }
         @supports (-webkit-touch-callout: none) { .campo-data input { -webkit-appearance:none; appearance:none; } }
         .hdr-btn { width:38px; height:38px; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
@@ -4548,39 +4632,79 @@ export default function App() {
               </button>
             </div>
             <div style={{ padding:"16px 18px", overflowY:"auto", flex:1 }}>
-              <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-                <input type="date" value={novoFeriado.data} onChange={e => setNovoFeriado(f => ({...f, data:e.target.value}))} style={{ ...INP, flex:"0 0 145px", fontSize:13 }} />
-                <input value={novoFeriado.nome} onChange={e => setNovoFeriado(f => ({...f, nome:e.target.value}))} placeholder="Nome" style={{ ...INP, flex:1 }} />
+              {/* v47 — um dia ou um período (De … Até) */}
+              <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:8, marginBottom:8 }}>
+                <label style={{ minWidth:0 }}>
+                  <span style={{ ...LBL, marginBottom:4 }}>De</span>
+                  <CampoData value={novoFeriado.data} T={T} ariaLabel="Feriado: data inicial" onChange={v => setNovoFeriado(f => ({...f, data:v}))} />
+                </label>
+                <label style={{ minWidth:0 }}>
+                  <span style={{ ...LBL, marginBottom:4 }}>Até (opcional)</span>
+                  <CampoData value={novoFeriado.ate} T={T} ariaLabel="Feriado: data final" onChange={v => setNovoFeriado(f => ({...f, ate:v}))} />
+                </label>
               </div>
+              <input value={novoFeriado.nome} onChange={e => setNovoFeriado(f => ({...f, nome:e.target.value}))} placeholder="Nome (ex.: Suspensão de prazos TJRS)" style={{ ...INP, width:"100%", boxSizing:"border-box", marginBottom:8 }} />
               <button onClick={() => {
-                if (!novoFeriado.data) return;
-                if (!feriados.includes(novoFeriado.data)) {
-                  setFeriados(prev => [...prev, novoFeriado.data].sort());
-                  setFeriadosNomes(prev => ({...prev, [novoFeriado.data]: novoFeriado.nome||novoFeriado.data}));
-                  toast("Feriado adicionado","success");
-                }
-                setNovoFeriado({ data:"", nome:"" });
+                if (!novoFeriado.data) { toast("Informe a data", "danger"); return; }
+                const dias = _diasEntre(novoFeriado.data, novoFeriado.ate);
+                if (!dias) { toast(novoFeriado.ate && novoFeriado.ate < novoFeriado.data ? "A data final é anterior à inicial" : "Período longo demais (máx. 62 dias) — confira as datas", "danger"); return; }
+                const novos = dias.filter(d => !feriados.includes(d));
+                if (novos.length === 0) { toast("Esses dias já estão cadastrados", "info"); return; }
+                const nome = novoFeriado.nome.trim() || (dias.length > 1 ? "Suspensão de prazos" : "Feriado");
+                setFeriados(prev => [...new Set([...prev, ...novos])].sort());
+                setFeriadosNomes(prev => { const n = {...prev}; novos.forEach(d => { n[d] = nome; }); return n; });
+                setFeriadosRemovidos(prev => (prev || []).filter(d => !novos.includes(d)));
+                toast(novos.length === 1 ? "Feriado adicionado" : `${novos.length} dias adicionados`, "success");
+                setNovoFeriado({ data:"", ate:"", nome:"" });
               }} style={{ ...BTN_PRIMARY, padding:"9px 14px", width:"100%", justifyContent:"center", marginBottom:14 }}>
                 <Icon name="plus" size={14} color={T.primaryText} /> Adicionar
               </button>
-              <div style={{ ...LBL, marginBottom:8 }}>{feriados.length} cadastrados</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                {feriados.map(d => (
-                  <div key={d} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.warnSoft+"55", border:`1px solid ${T.warn}33`, borderRadius:8, padding:"8px 12px" }}>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{fmt(d)}</div>
-                      <div style={{ fontSize:12, color:T.textSoft }}>{feriadosNomes[d] || "—"}</div>
+              {(() => {
+                // v47 — dias seguidos agrupados; os que já passaram ficam ocultos
+                // (só na exibição: continuam valendo para a contagem de prazos).
+                const grupos = _agruparFeriados(feriados, feriadosNomes);
+                const passados = grupos.filter(g => g.fim < hoje);
+                const visiveis = feriadosPassados ? grupos : grupos.filter(g => g.fim >= hoje);
+                return (
+                  <>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:8, marginBottom:8 }}>
+                      <span style={{ ...LBL, marginBottom:0 }}>{feriados.length} dias cadastrados</span>
+                      {passados.length > 0 && (
+                        <button onClick={() => setFeriadosPassados(v => !v)}
+                          style={{ background:"none", border:"none", padding:0, color:T.primary, fontSize:12, fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>
+                          {feriadosPassados ? "ocultar os que já passaram" : `mostrar ${passados.length} que já passaram`}
+                        </button>
+                      )}
                     </div>
-                    <button onClick={() => {
-                      setFeriados(prev => prev.filter(x => x !== d));
-                      setFeriadosNomes(prev => { const n = {...prev}; delete n[d]; return n; });
-                      toast("Feriado removido","danger");
-                    }} style={{ background:"transparent", border:"none", padding:4, cursor:"pointer", color:T.danger, display:"flex" }}>
-                      <Icon name="close" size={14} color={T.danger} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {visiveis.map(g => (
+                        <div key={g.ini} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.warnSoft+"55", border:`1px solid ${T.warn}33`, borderRadius:8, padding:"8px 12px", opacity: g.fim < hoje ? 0.6 : 1 }}>
+                          <div style={{ minWidth:0, textAlign:"left" }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.text }}>
+                              {g.dias.length === 1 ? fmt(g.ini) : `${fmt(g.ini)} a ${fmt(g.fim)}`}
+                              {g.dias.length > 1 && <span style={{ fontWeight:500, color:T.textMuted }}> · {g.dias.length} dias</span>}
+                            </div>
+                            <div style={{ fontSize:12, color:T.textSoft }}>
+                              {g.nome}{g.inclui.length > 0 && <span style={{ color:T.textMuted }}> (inclui {g.inclui.join(", ")})</span>}
+                            </div>
+                          </div>
+                          <button aria-label={`Remover ${g.nome}`} onClick={() => {
+                            if (g.dias.length > 1 && !window.confirm(`Remover ${g.dias.length} dias (${fmt(g.ini)} a ${fmt(g.fim)} — ${g.nome})?\nOs prazos passam a contar esses dias como úteis.`)) return;
+                            setFeriados(prev => prev.filter(x => !g.dias.includes(x)));
+                            setFeriadosNomes(prev => { const n = {...prev}; g.dias.forEach(d => { delete n[d]; }); return n; });
+                            // Do seed: guarda a exclusão para não voltar sozinho.
+                            const doSeed = g.dias.filter(d => FERIADOS_NOMES_SEED[d]);
+                            if (doSeed.length) setFeriadosRemovidos(prev => [...new Set([...(prev || []), ...doSeed])].sort());
+                            toast(g.dias.length === 1 ? "Feriado removido" : `${g.dias.length} dias removidos`, "danger");
+                          }} style={{ background:"transparent", border:"none", padding:4, cursor:"pointer", color:T.danger, display:"flex", flexShrink:0 }}>
+                            <Icon name="close" size={14} color={T.danger} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -4774,7 +4898,7 @@ export default function App() {
 
               {/* Botão Exportar */}
               <button onClick={() => {
-                gerarBackup({ prazos, tarefas, clientes, tiposCustom, feriados, feriadosNomes });
+                gerarBackup({ prazos, tarefas, clientes, tiposCustom, feriados, feriadosNomes, feriadosRemovidos });
                 setUltimoBackup(new Date().toISOString());
                 toast("Backup baixado","success");
               }} style={{ ...BTN_PRIMARY, padding:"12px", width:"100%", justifyContent:"center", fontSize:14 }}>
@@ -4797,6 +4921,7 @@ export default function App() {
                     if (dados.tiposCustom) setTiposCustom(dados.tiposCustom);
                     if (dados.feriados) setFeriados(dados.feriados);
                     if (dados.feriadosNomes) setFeriadosNomes(dados.feriadosNomes);
+                    if (dados.feriadosRemovidos) setFeriadosRemovidos(dados.feriadosRemovidos);
                     toast("Backup restaurado com sucesso","success");
                     setBackupModal(false);
                   });
@@ -4873,7 +4998,7 @@ export default function App() {
                           const di = form.dataInicio||"";
                           const dl = di && du > 0 ? calcularDataFinal(di, du) : "";
                           setForm(f => ({ ...f, diasUteis:e.target.value, dataLimite:dl }));
-                        }} placeholder="15" style={{ ...INP, minHeight:48 }} />
+                        }} placeholder="ex.: 15" style={{ ...INP, minHeight:48 }} />
                       </label>
                     </div>
                     <div style={{ fontSize:13, color:T.textSoft, lineHeight:1.45 }}>
@@ -4933,7 +5058,17 @@ export default function App() {
             <div style={{ display:"flex", flexWrap:"wrap", gap:"8px 10px", alignItems:"center", padding:"14px 20px", borderTop:`1px solid ${T.border}`, background:T.card }}>
               {(!form.processo||!form.dataLimite) && (
                 <span style={{ flex:"1 1 190px", minWidth:0, fontSize:12, color:T.textMuted, lineHeight:1.35 }}>
-                  Falta informar {[!form.processo && "o processo", !form.dataLimite && "a data limite"].filter(Boolean).join(" e ")}.
+                  Falta informar {(() => {
+                    // v47 — no modo "Início + dias úteis", diz o que falta para calcular.
+                    const modoFinal = (form.modoData||"final") === "final";
+                    const itens = [
+                      !form.processo && "o processo",
+                      !form.dataLimite && modoFinal && "a data limite",
+                      !form.dataLimite && !modoFinal && !form.dataInicio && "o 1º dia da contagem",
+                      !form.dataLimite && !modoFinal && !(parseInt(form.diasUteis||0) > 0) && "os dias úteis",
+                    ].filter(Boolean);
+                    return itens.length > 1 ? itens.slice(0, -1).join(", ") + " e " + itens[itens.length - 1] : itens[0];
+                  })()}.
                 </span>
               )}
               <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
