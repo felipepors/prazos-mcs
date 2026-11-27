@@ -2557,7 +2557,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
     return n;
   });
 
-  // Contagem real no banco: só as NOVO vêm todas para a tela; as demais paginam.
+  // Contagem real no banco: as NOVO são carregadas até 1.000 e as demais paginam.
   const [contagem, setContagem] = useState({});
   useEffect(() => {
     let vivo = true;
@@ -2568,8 +2568,8 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
         const { count } = await sb.from("intimacoes_oab").select("id", { count: "exact", head: true }).in("status", sts);
         return count ?? null;
       };
-      const [lidas, arquivadas] = await Promise.all([conta(["LIDO"]), conta(["TRATADO", "IGNORADO"])]);
-      if (vivo) setContagem({ lidas, arquivadas });
+      const [novas, lidas, arquivadas] = await Promise.all([conta(["NOVO"]), conta(["LIDO"]), conta(["TRATADO", "IGNORADO"])]);
+      if (vivo) setContagem({ novas, lidas, arquivadas });
     })();
     return () => { vivo = false; };
   }, [items]);
@@ -2636,7 +2636,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10, alignItems: "center" }}>
         {[
-          { rotulo: "Novas", sts: ["NOVO"], n: items.filter((i) => i.status === "NOVO").length },
+          { rotulo: "Novas", sts: ["NOVO"], n: contagem.novas ?? items.filter((i) => i.status === "NOVO").length },
           { rotulo: "Lidas", sts: ["LIDO"], n: contagem.lidas },
           { rotulo: "Arquivadas", sts: ["TRATADO", "IGNORADO"], n: contagem.arquivadas,
             dica: "Tratadas (viraram prazo) e ignoradas" },
