@@ -334,7 +334,7 @@ async function fazerLogout() {
 const TEMA = {
   light: {
     bg:"#F7F6F2", card:"#fff", cardAlt:"#FBFAF6", border:"#E8E5DC", borderStrong:"#D5D1C5",
-    text:"#1B2A4A", textSoft:"#52617E", textMuted:"#6B7892",
+    text:"#1B2A4A", textSoft:"#3E4A63", textMuted:"#52617E",
     primary:"#1B2A4A", primaryHover:"#13203A", primarySoft:"#EEF1F7", primaryText:"#fff",
     accent:"#F5C518", overlay:"#1B2A4A55",
     danger:"#e53e3e", dangerSoft:"#fff5f5", dangerBorder:"#fed7d7",
@@ -417,6 +417,8 @@ const ORDENACAO_OPTS = [
 const Icon = ({ name, size=18, color="currentColor" }) => {
   const icons = {
     scale:    <path d="M12 3v18M3 7h18M5 7l3 9a3 3 0 006 0l3-9M5 7l-2 5a2 2 0 004 0l-2-5zM19 7l-2 5a2 2 0 004 0l-2-5z" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
+    copy:     <><rect x="9" y="9" width="11" height="11" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M5 15V6a2 2 0 012-2h9" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round"/></>,
+    undo:     <path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>,
     plus:     <path d="M12 5v14M5 12h14" stroke={color} strokeWidth="2" strokeLinecap="round"/>,
     search:   <><circle cx="11" cy="11" r="7" stroke={color} strokeWidth="1.5" fill="none"/><path d="M21 21l-4.3-4.3" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" stroke={color} strokeWidth="1.5" fill="none"/><path d="M8 3v4M16 3v4M3 10h18" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></>,
@@ -749,7 +751,7 @@ const FERIADOS_NOMES_SEED = (() => {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENTES UI
 // ═════════════════════════════════════════════════════════════════════════════
-function Badge({ children, color, bg, size=11 }) {
+function Badge({ children, color, bg, size=12 }) {
   return <span style={{ background:bg, color, fontSize:size, fontWeight:700, borderRadius:20, padding:"3px 10px", fontFamily:"Inter,system-ui,sans-serif", whiteSpace:"nowrap" }}>{children}</span>;
 }
 
@@ -1059,7 +1061,7 @@ function ListaTarefas({ tarefas, setTarefas, onEdit, onDelete, onToggle, T, modo
               <Icon name="drag" size={16} color={T.textMuted} />
             </div>
             <div style={{ width:22, height:22, borderRadius:"50%", background:pr.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <span style={{ fontSize:11, fontWeight:800, color:pr.c }}>{idx+1}</span>
+              <span style={{ fontSize:12, fontWeight:800, color:pr.c }}>{idx+1}</span>
             </div>
             <div onClick={() => onToggle(t.id)}
               style={{ width:20, height:20, borderRadius:6, border:`2px solid ${pr.c}`, background:t.concluida?pr.c:"transparent", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -1071,7 +1073,7 @@ function ListaTarefas({ tarefas, setTarefas, onEdit, onDelete, onToggle, T, modo
                 <Badge color={pr.c} bg={pr.bg} size={10}>{PRIO_CFG[t.prioridade||"media"].label}</Badge>
               </div>
               {t.descricao && <div style={{ fontSize:12, color:T.textSoft, marginBottom:2 }}>{t.descricao}</div>}
-              <div style={{ fontSize:11, color:T.textMuted, display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+              <div style={{ fontSize:12, color:T.textMuted, display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
                 <span style={{ display:"flex", alignItems:"center", gap:3 }}><Icon name="user" size={11} color={T.textMuted} />{t.responsavel}</span>
                 {prazoInfo && (
                   <span style={{ color:prazoInfo.cor, fontWeight:600, display:"flex", alignItems:"center", gap:3 }}>
@@ -1134,17 +1136,17 @@ function TelaLogin({ T, modo, onToast }) {
             <img src="/icon-512.png" alt="MCS" style={{ width:54, height:54, borderRadius:"50%", objectFit:"cover" }} />
           </div>
           <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:T.text, letterSpacing:-0.2 }}>MCS Prazos</h1>
-          <div style={{ fontSize:10, fontWeight:600, color:"#C9A10E", letterSpacing:1.6, textTransform:"uppercase", marginTop:2 }}>Gestão processual</div>
+          <div style={{ fontSize:12, fontWeight:600, color:"#C9A10E", letterSpacing:1.6, textTransform:"uppercase", marginTop:2 }}>Gestão processual</div>
           <div style={{ fontSize:12, color:T.textMuted, marginTop:4 }}><img src="/logo-mcs.png" alt="Martins, Corrêa da Silva Advogados" style={{ height:36, display:"block", margin:"4px auto 0", filter: modo==="dark" ? "brightness(0) invert(1)" : "none" }} /></div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <label>
-            <span style={{ fontSize:11, color:T.textMuted, letterSpacing:1, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>E-mail</span>
+            <span style={{ fontSize:12, color:T.textMuted, letterSpacing:1, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>E-mail</span>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com"
               style={{ background:T.card, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none" }} />
           </label>
           <label>
-            <span style={{ fontSize:11, color:T.textMuted, letterSpacing:1, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Senha</span>
+            <span style={{ fontSize:12, color:T.textMuted, letterSpacing:1, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Senha</span>
             <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••" onKeyDown={e => e.key === "Enter" && submeter()}
               style={{ background:T.card, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none" }} />
           </label>
@@ -1155,7 +1157,7 @@ function TelaLogin({ T, modo, onToast }) {
           </button>
           {/* v31b — cadastro fechado no Supabase (02/08): link "Criar uma" removido. Conta nova: painel do Supabase → Add user. */}
         </div>
-        <div style={{ marginTop:20, padding:"10px 12px", background:T.cardAlt, borderRadius:8, fontSize:11, color:T.textMuted, lineHeight:1.5 }}>
+        <div style={{ marginTop:20, padding:"10px 12px", background:T.cardAlt, borderRadius:8, fontSize:12, color:T.textMuted, lineHeight:1.5 }}>
           🔒 Seus dados ficam armazenados de forma segura no Supabase e sincronizam automaticamente em todos os seus dispositivos.
         </div>
       </div>
@@ -1391,13 +1393,13 @@ function renderTextoDjen(texto, gatilhosStr, medicamentosStr) {
 // v34b — nome do escritório em texto (era o PNG, ilegível no celular); tamanho fluido no celular.
 // Limpa prazo_id; se a intimacao estava TRATADO (gravado pelo proprio vinculo),
 // volta para NOVO. LIDO e IGNORADO foram decisao do Felipe e ficam como estao.
-async function desvincularIntimacoes(prazoIds) {
+async function desvincularIntimacoes(prazoIds, manterStatus = false) {
   if (!_sb || !prazoIds || !prazoIds.length) return { error: null, n: 0, voltaramNovo: 0 };
   const { data, error } = await _sb.from("intimacoes_oab").select("id,status").in("prazo_id", prazoIds.map(String));
   if (error) return { error, n: 0, voltaramNovo: 0 };
   let voltaramNovo = 0;
   for (const r of data || []) {
-    const novoStatus = r.status === "TRATADO" ? "NOVO" : r.status;
+    const novoStatus = (!manterStatus && r.status === "TRATADO") ? "NOVO" : r.status;
     const { error: e } = await _sb.from("intimacoes_oab").update({ prazo_id: null, status: novoStatus }).eq("id", r.id);
     if (e) return { error: e, n: 0, voltaramNovo };
     if (novoStatus !== r.status) voltaramNovo++;
@@ -1551,7 +1553,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
               display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2,
               minWidth:80,
             }}>
-            <span style={{ fontSize:10, fontWeight:500, opacity:0.85, letterSpacing:"0.06em", textTransform:"uppercase" }}>{label}</span>
+            <span style={{ fontSize:12, fontWeight:500, opacity:0.85, letterSpacing:"0.06em", textTransform:"uppercase" }}>{label}</span>
             <span style={{ fontSize:18, fontWeight:700 }}>{n}</span>
           </button>
         ))}
@@ -1586,7 +1588,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
             ? "Nenhuma publicação enviada do dashboard ainda."
             : "Nenhuma publicação corresponde aos filtros."}
           {items.length === 0 && (
-            <div style={{ marginTop:14, fontSize:11, color:T.textMuted }}>
+            <div style={{ marginTop:14, fontSize:12, color:T.textMuted }}>
               Use o botão "Enviar para MCS Prazos" no dashboard local para começar.
             </div>
           )}
@@ -1608,13 +1610,13 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                     {p.acompanhar && (
                       <span title="Processo sob acompanhamento contínuo no DJEN"
                         style={{ background:"#5c6b3a", color:"#fff", padding:"2px 7px", borderRadius:3,
-                                 fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
+                                 fontSize:12, fontWeight:600, letterSpacing:"0.04em" }}>
                         🔔 ACOMP
                       </span>
                     )}
                     {(p.id_djen||"").startsWith("manual_") && (
                       <span title="Processo adicionado manualmente"
-                        style={{ background:"#744210", color:"#fefcbf", padding:"2px 7px", borderRadius:3, fontSize:10, fontWeight:600, letterSpacing:"0.04em" }}>
+                        style={{ background:"#744210", color:"#fefcbf", padding:"2px 7px", borderRadius:3, fontSize:12, fontWeight:600, letterSpacing:"0.04em" }}>
                         MANUAL
                       </span>
                     )}
@@ -1625,17 +1627,17 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                       {p.numero_processo || "—"}
                     </span>
                     <span style={{ background:T.text, color:T.card, padding:"2px 7px", borderRadius:3,
-                                   fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:"0.06em" }}>
+                                   fontFamily:"monospace", fontSize:12, fontWeight:600, letterSpacing:"0.06em" }}>
                       {p.tribunal || "—"}
                     </span>
                     <span style={{ border:`1px solid ${p.prioridade===1?"#b8412e":p.prioridade===2?"#c9892e":"#6b6b6b"}`,
                                    color:p.prioridade===1?"#b8412e":p.prioridade===2?"#c9892e":"#6b6b6b",
-                                   padding:"1px 7px", borderRadius:3, fontFamily:"monospace", fontSize:10, fontWeight:600 }}>
+                                   padding:"1px 7px", borderRadius:3, fontFamily:"monospace", fontSize:12, fontWeight:600 }}>
                       P{p.prioridade}
                     </span>
                   </div>
                   <span style={{ background:stCfg.bg, color:stCfg.cor, padding:"2px 8px",
-                                 borderRadius:10, fontSize:10, fontWeight:600, letterSpacing:"0.04em",
+                                 borderRadius:10, fontSize:12, fontWeight:600, letterSpacing:"0.04em",
                                  textTransform:"uppercase" }}>
                     {stCfg.label}
                   </span>
@@ -1649,12 +1651,12 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                     if (!c) return null;
                     return (
                       <span key={g} style={{ background:c.bg, color:c.cor, padding:"1px 6px",
-                                              borderRadius:3, fontFamily:"monospace", fontSize:9.5, fontWeight:600 }}>
+                                              borderRadius:3, fontFamily:"monospace", fontSize:12, fontWeight:600 }}>
                         {c.label}
                       </span>
                     );
                   })}
-                  <span style={{ marginLeft:"auto", color:T.textMuted, fontFamily:"monospace", fontSize:10 }}>
+                  <span style={{ marginLeft:"auto", color:T.textMuted, fontFamily:"monospace", fontSize:12 }}>
                     {p.data_publicacao ? p.data_publicacao.split("-").reverse().join("/") : ""}
                   </span>
                 </div>
@@ -1676,7 +1678,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
             <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.border}`,
                           display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:14 }}>
               <div>
-                <div style={{ fontSize:11, color:T.textMuted, marginBottom:4, fontFamily:"monospace", letterSpacing:"0.1em" }}>
+                <div style={{ fontSize:12, color:T.textMuted, marginBottom:4, fontFamily:"monospace", letterSpacing:"0.1em" }}>
                   PUBLICAÇÃO DJEN
                 </div>
                 <div style={{ fontSize:16, fontWeight:600, fontFamily:"monospace" }}>
@@ -1692,27 +1694,27 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
             <div style={{ padding:"18px 22px" }}>
               {/* Metadados em grid */}
               <div style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:"8px 14px", fontSize:13, marginBottom:18 }}>
-                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Tribunal</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Tribunal</span>
                 <span>{detalhe.tribunal || "—"}</span>
-                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Data pub.</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Data pub.</span>
                 <span style={{ fontFamily:"monospace" }}>{detalhe.data_publicacao ? detalhe.data_publicacao.split("-").reverse().join("/") : "—"}</span>
-                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Gatilhos</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Gatilhos</span>
                 <span>{(detalhe.gatilhos||"").split(";").map(g => COR_GATILHO[g.trim()]?.label || g.trim()).filter(Boolean).join(" · ") || "—"}</span>
-                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase" }}>Medicamentos</span>
+                <span style={{ color:T.textMuted, fontFamily:"monospace", fontSize:12, letterSpacing:"0.08em", textTransform:"uppercase" }}>Medicamentos</span>
                 <span>{detalhe.medicamentos || "—"}</span>
               </div>
 
               {/* Observação editável */}
               <div style={{ marginBottom:18 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                  <div style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                  <div style={{ fontSize:12, color:T.textMuted, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
                     Observação
                   </div>
                   <button onClick={salvarObservacao}
                     disabled={salvandoObs || (obsEdit || "") === (detalhe.observacao || "")}
                     style={{
                       ...BTN,
-                      fontSize:11, padding:"5px 12px",
+                      fontSize:12, padding:"5px 12px",
                       background: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? "transparent" : T.primary,
                       color: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.textMuted : "#fff",
                       borderColor: (salvandoObs || (obsEdit || "") === (detalhe.observacao || "")) ? T.border : T.primary,
@@ -1735,7 +1737,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
               {/* Texto destacado */}
               {detalhe.texto_publicacao && (
                 <div style={{ marginBottom:18 }}>
-                  <div style={{ fontSize:10, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                  <div style={{ fontSize:12, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
                     Texto da publicação
                   </div>
                   <div style={{ background:T.card, padding:"14px 16px", borderRadius:6,
@@ -1759,7 +1761,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                     <div style={{ fontSize:13, fontWeight:600, color:T.text }}>
                       Acompanhar este processo no DJEN
                     </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginTop:3, lineHeight:1.5 }}>
+                    <div style={{ fontSize:12, color:T.textMuted, marginTop:3, lineHeight:1.5 }}>
                       O monitor passa a buscar TODAS as movimentações deste processo, mesmo as não-oncológicas.
                       Você recebe alerta no e-mail quando houver novidade.
                     </div>
@@ -1769,7 +1771,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 
               {/* Ações: mudar status */}
               <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:14 }}>
-                <div style={{ fontSize:10, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
+                <div style={{ fontSize:12, color:T.textMuted, marginBottom:8, fontFamily:"monospace", letterSpacing:"0.1em", textTransform:"uppercase" }}>
                   Workflow
                 </div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -1821,20 +1823,20 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
             <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Adicionar processo para acompanhamento</div>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2ª passada diária.</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:3 }}>O monitor passa a monitorar este processo na 2ª passada diária.</div>
               </div>
               <button onClick={() => setModalNovoProcesso(false)} style={{ background:"none", border:"none", color:T.textMuted, fontSize:22, cursor:"pointer", padding:0 }}>×</button>
             </div>
             <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:12 }}>
               <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Número do processo *</span>
+                <span style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Número do processo *</span>
                 <input autoFocus value={formNovoProcesso.numero_processo}
                   onChange={e => setFormNovoProcesso(f => ({ ...f, numero_processo: mascararProcesso(e.target.value) }))}
                   placeholder="0000000-00.0000.0.00.0000"
                   style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"monospace", outline:"none", width:"100%", boxSizing:"border-box" }} />
               </label>
               <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Tribunal (opcional)</span>
+                <span style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Tribunal (opcional)</span>
                 <select value={formNovoProcesso.tribunal} onChange={e => setFormNovoProcesso(f => ({ ...f, tribunal: e.target.value }))}
                   style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" }}>
                   <option value="">Qualquer tribunal</option>
@@ -1842,7 +1844,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                 </select>
               </label>
               <label>
-                <span style={{ fontSize:11, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observação (opcional)</span>
+                <span style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" }}>Observação (opcional)</span>
                 <textarea value={formNovoProcesso.observacao} onChange={e => setFormNovoProcesso(f => ({ ...f, observacao: e.target.value }))}
                   rows={2} placeholder="Ex: Cliente atual..."
                   style={{ background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box", resize:"vertical" }} />
@@ -1888,8 +1890,8 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                   <span style={{ fontWeight:700, color:T.text }}>{e.numero_processo || "—"}</span>
                   {e.tribunal && <span style={{ color:T.textMuted }}>· {e.tribunal}</span>}
                   {e.data_publicacao && <span style={{ color:T.textMuted }}>· {e.data_publicacao}</span>}
-                  {e.status && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:11, fontWeight:600, background: STATUS_DJEN[e.status]?.cor || T.primary, color:"#fff" }}>{e.status}</span>}
-                  {e.id_djen && e.id_djen.startsWith("manual_") && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10, fontWeight:700, background:"#4a90d9", color:"#fff" }}>MANUAL</span>}
+                  {e.status && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:12, fontWeight:600, background: STATUS_DJEN[e.status]?.cor || T.primary, color:"#fff" }}>{e.status}</span>}
+                  {e.id_djen && e.id_djen.startsWith("manual_") && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:12, fontWeight:700, background:"#4a90d9", color:"#fff" }}>MANUAL</span>}
                 </div>
               ))}
             </div>
@@ -1952,9 +1954,9 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
                           style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 12px", borderRadius:8, border:`1px solid ${T.border}`, background:T.bgSoft || "transparent" }}>
                           <div style={{ minWidth:0 }}>
                             <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{p.tipo || "Prazo"}</div>
-                            <div style={{ fontSize:11.5, color:T.textMuted }}>{p.parte || "—"} · venc. {fmt(p.dataLimite)}</div>
+                            <div style={{ fontSize:12, color:T.textMuted }}>{p.parte || "—"} · venc. {fmt(p.dataLimite)}</div>
                           </div>
-                          <span style={{ fontSize:10.5, fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:6,
+                          <span style={{ fontSize:12, fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:6,
                             color: p.concluido ? "#3a7d44" : "#b8412e",
                             border: `1px solid ${p.concluido ? "#3a7d44" : "#b8412e"}` }}>
                             {p.concluido ? "Concluído" : "Ativo"}
@@ -2132,7 +2134,7 @@ function ModalPrestadores({ T, toast, user, onClose }) {
         <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div>
             <div style={{ fontSize:15, fontWeight:700, color:T.text }}>Prestadores cadastrados</div>
-            <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>O e-mail é preenchido sozinho quando chega um alvará do mesmo CNPJ/CPF</div>
+            <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>O e-mail é preenchido sozinho quando chega um alvará do mesmo CNPJ/CPF</div>
           </div>
           <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", display:"flex" }}>
             <Icon name="close" size={18} color={T.textMuted} />
@@ -2141,7 +2143,7 @@ function ModalPrestadores({ T, toast, user, onClose }) {
 
         <div style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:12 }}>
           <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
-            <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:8, textTransform:"uppercase", letterSpacing:0.4 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:T.textMuted, marginBottom:8, textTransform:"uppercase", letterSpacing:0.4 }}>
               {editId ? "Editar prestador" : "Novo prestador"}
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -2184,7 +2186,7 @@ function ModalPrestadores({ T, toast, user, onClose }) {
                     <div style={{ fontSize:13, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                       {p.nome || fmtDoc(p.documento)}
                     </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    <div style={{ fontSize:12, color:T.textMuted, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                       {fmtDoc(p.documento)} · {p.email}
                     </div>
                   </div>
@@ -2542,10 +2544,10 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
           style={{ border: "none", background: buscando ? T.border : "#F5C518", color: buscando ? T.textMuted : "#1B2A4A", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: buscando ? "wait" : "pointer" }}>
           {buscando ? "Buscando…" : "🔎 Buscar agora"}
         </button>
-        <span style={{ fontSize: 11, color: T.textMuted }}>De</span>
+        <span style={{ fontSize: 12, color: T.textMuted }}>De</span>
         <input type="date" className={de ? "" : "data-vazia"} value={de} onChange={(e) => setDe(e.target.value)} disabled={buscando}
           style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
-        <span style={{ fontSize: 11, color: T.textMuted }}>até</span>
+        <span style={{ fontSize: 12, color: T.textMuted }}>até</span>
         <input type="date" className={ate ? "" : "data-vazia"} value={ate} onChange={(e) => setAte(e.target.value)} disabled={buscando}
           style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "4px 8px", fontSize: 12 }} />
         {(de || ate) && (
@@ -2554,7 +2556,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
             ✕ limpar
           </button>
         )}
-        <span style={{ fontSize: 10, color: T.textMuted }}>
+        <span style={{ fontSize: 12, color: T.textMuted }}>
           {de || ate ? "período informado" : "sem período = últimos 7 dias"}
         </span>
       </div>
@@ -2621,7 +2623,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
                     ? <span style={{ fontWeight: 600 }}>{clientes[i.numero_processo]}</span>
                     : (i.partes || "—")}
                 </div>
-                {i.nome_orgao && <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{i.nome_orgao}</div>}
+                {i.nome_orgao && <div style={{ fontSize: 12, color: T.textSoft, marginTop: 2 }}>{i.nome_orgao}</div>}
                 {i.trecho && !(i.classificacao === "SIGILOSO" || /^processo sigiloso/i.test(i.trecho)) && (
                   <div style={{ fontSize: 12, color: T.textSoft, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {i.trecho}
@@ -2683,12 +2685,12 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
                     + Criar prazo →
                   </button>}
             </div>
-            <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
               A data-limite abre em branco de propósito — calcule lendo o inteiro teor (CPC 224).
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
                 Cliente {(!clientes[detalhe.numero_processo] && (!detalhe.partes || /SIGILO/i.test(detalhe.partes))) ? "— processo sigiloso, cadastre" : ""}
               </label>
               <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
@@ -2700,13 +2702,13 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
                   Salvar
                 </button>
               </div>
-              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>
+              <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
                 Vale para todas as intimações deste processo. Campo vazio + Salvar remove o cadastro.
               </div>
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: ".04em" }}>
                 Observação
               </label>
               <textarea value={obsEdit} onChange={(e) => setObsEdit(e.target.value)} rows={3}
@@ -2724,7 +2726,7 @@ function PainelIntimacoes({ T, user, toast, setForm, setModal, setAba, onContage
               </button>
             </div>
 
-            <div style={{ marginTop: 12, fontSize: 11, color: T.textMuted }}>
+            <div style={{ marginTop: 12, fontSize: 12, color: T.textMuted }}>
               Classificação automática por padrões de texto — confira o inteiro teor antes de calcular prazo.
             </div>
           </div>
@@ -2870,7 +2872,7 @@ function PainelAlvaras({ T, toast, user }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14, flexWrap:"wrap" }}>
         <div>
           <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Alvarás</h2>
-          <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+          <div style={{ fontSize:12, color:T.textMuted, marginTop:3 }}>
             {items.length} alvará(s) · suba o PDF para extrair e preparar o aviso
           </div>
         </div>
@@ -2910,14 +2912,14 @@ function PainelAlvaras({ T, toast, user }) {
                   <div style={{ fontSize:14, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {a.prestador || "—"}
                   </div>
-                  <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>
+                  <div style={{ fontSize:12, color:T.textMuted, marginTop:3 }}>
                     {a.documento || ""} · proc. {a.processo || "—"}
                   </div>
                   <div style={{ fontSize:13, color:T.text, marginTop:5, fontWeight:600 }}>
                     Líquido: {brlCentavos(a.valor_liquido_creditado_centavos)}
                   </div>
                 </div>
-                <span style={{ flexShrink:0, fontSize:10, fontWeight:700, color:"#fff", background:st.cor,
+                <span style={{ flexShrink:0, fontSize:12, fontWeight:700, color:"#fff", background:st.cor,
                   padding:"4px 9px", borderRadius:20, whiteSpace:"nowrap" }}>{st.label}</span>
               </button>
             );
@@ -2947,8 +2949,8 @@ function PainelAlvaras({ T, toast, user }) {
 
               <div style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:"#fff", background:st.cor, padding:"4px 9px", borderRadius:20 }}>{st.label}</span>
-                  <span style={{ fontSize:11, color: a.documento_valido ? "#2E7D32" : "#B00020", fontWeight:600 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"#fff", background:st.cor, padding:"4px 9px", borderRadius:20 }}>{st.label}</span>
+                  <span style={{ fontSize:12, color: a.documento_valido ? "#2E7D32" : "#B00020", fontWeight:600 }}>
                     {a.documento_tipo}{a.documento_valido ? " válido" : " — confira"}
                   </span>
                 </div>
@@ -2973,10 +2975,10 @@ function PainelAlvaras({ T, toast, user }) {
 
                 <div style={{ marginTop:6 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                    <span style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:"uppercase", letterSpacing:0.4 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:T.textMuted, textTransform:"uppercase", letterSpacing:0.4 }}>
                       E-mail {a.email_destino ? `→ ${a.email_destino}` : ""}
                     </span>
-                    <span style={{ fontSize:10, color:T.textMuted, fontStyle:"italic" }}>editável antes de enviar</span>
+                    <span style={{ fontSize:12, color:T.textMuted, fontStyle:"italic" }}>editável antes de enviar</span>
                   </div>
                   <input type="text" value={assuntoEdit} onChange={e => setAssuntoEdit(e.target.value)} placeholder="Assunto do e-mail"
                     style={{ width:"100%", boxSizing:"border-box", background:T.card, border:`1px solid ${T.border}`, borderRadius:9,
@@ -2989,7 +2991,7 @@ function PainelAlvaras({ T, toast, user }) {
                 {semEmail && !enviado && (
                   <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:8 }}>
+                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
                       Informe o(s) e-mail(s) do prestador para habilitar o envio (fica salvo para os próximos alvarás). Para múltiplos destinatários, separe por vírgula.
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
@@ -3090,10 +3092,10 @@ function KitContratacaoModal({ T, INP, LBL, BTN_PRIMARY, BTN_GHOST, kitPrazo, ki
                     onDrop={e=>{e.preventDefault();setDragOver(null);const f=e.dataTransfer.files?.[0];if(f&&f.name.match(/\.pdf$/i))setKitArqs(p=>({...p,[slot.id]:f}));}}
                     onClick={()=>!arq&&refs.current[slot.id]?.click()}>
                     <input type="file" accept=".pdf" style={{display:"none"}} ref={el=>refs.current[slot.id]=el} onChange={e=>{const f=e.target.files?.[0];if(f)setKitArqs(p=>({...p,[slot.id]:f}));}}/>
-                    <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
+                    <span style={{width:20,height:20,borderRadius:"50%",background:arq?"#16a34a":T.border,display:"flex",alignItems:"center",justifyContent:"center",color:arq?"#fff":T.textSoft,fontSize:12,fontWeight:700,flexShrink:0}}>{i+1}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:arq?"#166534":T.text}}>{slot.label}</div>
-                      <div style={{fontSize:11,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
+                      <div style={{fontSize:12,color:arq?"#166534":T.textSoft}}>{arq?arq.name:over?"Solte aqui":slot.hint+" - arraste ou clique"}</div>
                     </div>
                     {arq && <button onClick={e=>{e.stopPropagation();setKitArqs(p=>{const n={...p};delete n[slot.id];return n;});}} style={{background:"none",border:"none",cursor:"pointer",color:"#999",fontSize:16,padding:"0 4px"}}>×</button>}
                   </div>
@@ -3163,6 +3165,8 @@ export default function App() {
   const [modal, setModal]               = useState(null);
   const [form, setForm]                 = useState({});
   const [confirmDel, setConfirmDel]     = useState(null);
+  const [confirmDelConcl, setConfirmDelConcl] = useState(null); // ids dos concluídos a excluir em lote
+  const [concluidosAbertos, setConcluidosAbertos] = useState(false);
   const [confirmDuplasPrazo, setConfirmDuplasPrazo] = useState(null); // { existentes, form } — alerta de prazo duplicado
   const [resumoAberto, setResumoAberto] = useState(false);
   const [gerirTipos, setGerirTipos]     = useState(false);
@@ -3317,19 +3321,29 @@ export default function App() {
       const novaData = proximaDataRecorrencia(p.dataLimite, p.recorrencia);
       if (novaData) {
         setPrazos(prev => [
-          ...prev.map(x => x.id === id ? {...x, concluido:true} : x),
+          ...prev.map(x => x.id === id ? {...x, concluido:true, concluidoEm:isoLocal()} : x),
           {...p, id:Date.now(), concluido:false, dataLimite:novaData, obs:(p.obs||"") + " [recorrência]"}
         ]);
         toast("Concluído + próximo prazo criado","success");
         return;
       }
     }
-    setPrazos(prev => prev.map(x => x.id === id ? {...x, concluido:!x.concluido} : x));
+    setPrazos(prev => prev.map(x => x.id === id ? {...x, concluido:!x.concluido, concluidoEm: x.concluido ? null : isoLocal()} : x));
     toast(p.concluido ? "Prazo reaberto" : "Prazo concluído","success");
   };
+  const excluirConcluidos = ids => {
+    const alvo = new Set(ids);
+    setPrazos(prev => prev.filter(p => !(alvo.has(p.id) && p.concluido)));
+    setConfirmDelConcl(null);
+    toast(`${ids.length} prazo(s) concluído(s) excluído(s)`, "danger");
+    desvincularIntimacoes(ids, true).then(({ error }) => {
+      if (error) toast("Prazos excluídos, mas falhou desfazer o vínculo com a intimação — confira na aba Intimações.", "danger");
+    });
+  };
   const deletar = id => {
+    const eraConcluido = !!(prazos.find(p => p.id === id) || {}).concluido;
     setPrazos(prev => prev.filter(p => p.id !== id)); setConfirmDel(null); toast("Prazo excluído","danger");
-    desvincularIntimacoes([id]).then(({ error, voltaramNovo }) => {
+    desvincularIntimacoes([id], eraConcluido).then(({ error, voltaramNovo }) => {
       if (error) toast("Prazo excluído, mas falhou desvincular a intimação — abra-a na aba Intimações e confira.", "danger");
       else if (voltaramNovo > 0) { toast("A intimação vinculada voltou para NOVO", "info"); atualizarNovasIntim(); }
     });
@@ -3375,11 +3389,11 @@ export default function App() {
   };
 
   const totalAtencao = resumoData.vencidos.length + resumoData.urgentes.length + resumoData.proximos.length;
-  const hasOverlay = resumoAberto || gerirTipos || modal !== null || !!confirmDel || cmdModal || tarefaModal || !!exportModal || feriadoModal || menuMobile || clienteModal || backupModal;
+  const hasOverlay = resumoAberto || gerirTipos || modal !== null || !!confirmDel || !!confirmDelConcl || cmdModal || tarefaModal || !!exportModal || feriadoModal || menuMobile || clienteModal || backupModal;
 
   // Estilos reutilizáveis (memo do tema)
   const INP = { background:T.card, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, fontFamily:"Inter,system-ui,sans-serif", outline:"none", width:"100%", boxSizing:"border-box" };
-  const LBL = { fontSize:11, color:T.textMuted, letterSpacing:1.2, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" };
+  const LBL = { fontSize:12, color:T.textMuted, letterSpacing:1.2, textTransform:"uppercase", fontWeight:600, marginBottom:5, display:"block" };
   const BTN_GHOST = { background:T.cardAlt, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 14px", color:T.textSoft, cursor:"pointer", fontSize:13, fontWeight:500 };
   const BTN_PRIMARY = { background:T.primary, border:"none", borderRadius:10, padding:"10px 18px", color:T.primaryText, fontWeight:600, cursor:"pointer", fontSize:14, display:"inline-flex", alignItems:"center", gap:6 };
 
@@ -3537,7 +3551,7 @@ export default function App() {
             {label}
             {key === "intimacoes" && novasIntim > 0 && (
               <span title={`${novasIntim} intimação(ões) NOVO — ainda não cumprida(s)`} aria-label={`${novasIntim} novas`}
-                style={{ background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:700, minWidth:16, lineHeight:"16px", textAlign:"center" }}>{novasIntim}</span>
+                style={{ background:T.danger, color:"#fff", borderRadius:10, padding:"0 5px", fontSize:12, fontWeight:700, minWidth:16, lineHeight:"16px", textAlign:"center" }}>{novasIntim}</span>
             )}
           </button>
         ); })}
@@ -3585,19 +3599,19 @@ export default function App() {
                   borderRadius:14, padding:"10px 14px", cursor:"pointer", textAlign:"left",
                   minWidth:88, flexShrink:0,
                 }}>
-                <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, marginBottom:2, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
+                <div style={{ fontSize:12, color:T.textMuted, fontWeight:600, marginBottom:2, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
                 <div style={{ fontSize:22, fontWeight:800, color:cor, lineHeight:1 }}>{contadores[key]}</div>
               </button>
             ))}
           </div>
 
           {qtdLeads > 0 && (
-            <div style={{ padding:"8px 16px 0", fontSize:11, color:T.textMuted, display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ padding:"8px 16px 0", fontSize:12, color:T.textMuted, display:"flex", alignItems:"center", gap:6 }}>
               {mostrarLeads
                 ? `Mostrando ${qtdLeads} lead(s) de medicamentos (Acompanhar)`
                 : `${qtdLeads} lead(s) de medicamentos (Acompanhar) oculto(s)`}
               <button onClick={() => setMostrarLeads(v => !v)}
-                style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:11, fontWeight:600, padding:0 }}>
+                style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:12, fontWeight:600, padding:0 }}>
                 {mostrarLeads ? "Ocultar" : "Mostrar leads"}
               </button>
             </div>
@@ -3642,60 +3656,82 @@ export default function App() {
 
           {/* Contagem + limpar */}
           {(filtro!=="todos" || filtroPrioridade!=="todas" || filtroResp!=="todos" || busca) && (
-            <div style={{ padding:"0 16px 8px", fontSize:11, color:T.textMuted, display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ padding:"0 16px 8px", fontSize:12, color:T.textMuted, display:"flex", alignItems:"center", gap:6 }}>
               {lista.length} resultado(s)
               <button onClick={() => { setFiltro("todos"); setFiltroPrioridade("todas"); setFiltroResp("todos"); setBusca(""); }}
-                style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:11 }}>
+                style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:12 }}>
                 Limpar
               </button>
             </div>
           )}
 
-          {/* Lista */}
-          <div style={{ padding:"0 16px", display:"flex", flexDirection:"column", gap:8 }}>
+          {/* Lista (v42): pendentes agrupados por período; concluídos recolhidos no fim */}
+          <div style={{ padding:"0 16px", display:"flex", flexDirection:"column", gap:10, textAlign:"left" }}>
             {lista.length===0 && <div style={{ textAlign:"center", padding:48, color:T.textMuted, fontSize:14 }}>Nenhum prazo encontrado.</div>}
-            {lista.map(p => {
-              const st = STATUS_CFG[p.status][modo];
-              const du = diasUteisRestantes(p.dataLimite);
-              const tribunal = tribunalDoCNJ(p.processo);
-              // Extrair info DJEN da obs quando captado do monitor
-              const isDjen = p.djenId || (p.obs && p.obs.includes("Captado do DJEN"));
-              const djenInfoMatch = isDjen && p.obs ? p.obs.match(/Captado do DJEN[^—\n]*[—\-]\s*([\d-]+)/) : null;
-              const djenGatilho = isDjen && p.obs ? (p.obs.match(/Gatilhos:\s*([^\n]+)/) || [])[1] : null;
-              const djenMed = isDjen && p.obs ? (p.obs.match(/Medicamentos:\s*([^\n]+)/) || [])[1] : null;
-              return (
-                <div key={p.id} style={{
-                  background:T.card, border:`1px solid ${T.border}`,
-                  borderLeft:`4px solid ${st.c}`,
-                  borderRadius:16, padding:"13px 15px", display:"flex", alignItems:"center", gap:10,
-                  opacity:p.concluido?0.6:1,
-                  boxShadow:"0 1px 3px #0000000a",
-                }}>
-                  <div onClick={() => toggleConcluidoComRecorrencia(p.id)}
-                    style={{ width:22, height:22, borderRadius:6, border:`2px solid ${st.c}`, background:p.concluido?st.c:"transparent", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    {p.concluido && <Icon name="check" size={14} color="#fff" />}
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                      <span style={{ fontWeight:600, fontSize:14, color:T.text, textDecoration:p.concluido?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.parte}</span>
+            {(() => {
+              const DIAS_SEM = ["dom","seg","ter","qua","qui","sex","sáb"];
+              const MESES_AB = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+              const corProc = modo === "dark" ? "#85B7EB" : "#185FA5";
+              const pendentes = lista.filter(p => !p.concluido);
+              const concluidos = lista.filter(p => p.concluido).sort((x,y) => (y.concluidoEm || y.dataLimite || "").localeCompare(x.concluidoEm || x.dataLimite || ""));
+              const amanha = (() => { const d = new Date(); d.setDate(d.getDate()+1); return isoLocal(d); })();
+              const grupoDe = p => {
+                const du = diasUteisRestantes(p.dataLimite);
+                if (du < 0) return "vencidos";
+                if (du === 0) return "hoje";
+                if (du === 1) return "amanha";
+                if (du <= 5) return "semana";
+                return "depois";
+              };
+              const GRUPOS = [
+                { k:"vencidos", label:"Vencidos", st:"vencido" },
+                { k:"hoje",     label:"Hoje", st:"urgente" },
+                { k:"amanha",   label: pendentes.some(p => grupoDe(p)==="amanha" && p.dataLimite !== amanha) ? "Próximo dia útil" : "Amanhã", st:"urgente" },
+                { k:"semana",   label:"Esta semana", st:"proximo" },
+                { k:"depois",   label:"Depois", st:"normal" },
+              ];
+              const copiar = num => { try { navigator.clipboard.writeText(num); toast("Número copiado","success"); } catch(_) { toast("Não foi possível copiar","danger"); } };
+              const renderCard = p => {
+                const st = STATUS_CFG[p.status][modo];
+                const du = diasUteisRestantes(p.dataLimite);
+                const tribunal = tribunalDoCNJ(p.processo);
+                const isDjen = p.djenId || (p.obs && p.obs.includes("Captado do DJEN"));
+                const djenGatilho = isDjen && p.obs ? (p.obs.match(/Gatilhos:\s*([^\n]+)/) || [])[1] : null;
+                const djenMed = isDjen && p.obs ? (p.obs.match(/Medicamentos:\s*([^\n]+)/) || [])[1] : null;
+                const partesData = (p.dataLimite || "").split("-");
+                const dObj = new Date((p.dataLimite || "") + "T00:00:00");
+                const dataOk = partesData.length === 3 && !isNaN(dObj);
+                return (
+                  <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:16, padding:16, display:"flex", alignItems:"flex-start", gap:14, boxShadow:"0 1px 3px #0000000a" }}>
+                    <div style={{ width:58, flexShrink:0, borderRadius:12, textAlign:"center", padding:"8px 0", background:st.bg, color:st.text }}>
+                      <div style={{ fontSize:12 }}>{dataOk ? DIAS_SEM[dObj.getDay()] : ""}</div>
+                      <div style={{ fontSize:22, fontWeight:700, lineHeight:1.1 }}>{dataOk ? partesData[2] : "—"}</div>
+                      <div style={{ fontSize:12 }}>{dataOk ? MESES_AB[parseInt(partesData[1],10)-1] : ""}</div>
                     </div>
-                    <div style={{ fontSize:11, color:T.textMuted, marginBottom:4 }}>{p.tipo} · {p.processo ? (
-                      <span onClick={() => { setProcessoAlvoDjen(p.processo); setAba("djen"); }}
-                        title="Ver no DJEN"
-                        style={{ fontFamily:"monospace", color:T.primary, cursor:"pointer", textDecoration:"underline", textDecorationStyle:"dotted", textUnderlineOffset:2 }}>{p.processo}</span>
-                    ) : <span style={{fontFamily:"monospace"}}>{p.processo}</span>}{tribunal && (
-                      <span title={`Tribunal: ${tribunal}`}
-                        style={{ marginLeft:6, fontSize:9.5, fontWeight:700, letterSpacing:0.3, color:T.primary, background:T.cardAlt, border:`1px solid ${T.border}`, padding:"1px 6px", borderRadius:4, verticalAlign:"middle", whiteSpace:"nowrap" }}>{tribunal}</span>
-                    )}</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                      <StatusBadge status={p.status} modo={modo} />
-                      <span style={{ fontSize:11, color:st.c, fontWeight:600 }}>{fmt(p.dataLimite)} · {diasLabel(du, p.concluido)}</span>
-                      {/* v35: botões comerciais só nos leads (Acompanhar) — prazo processual não tem orçamento nem "data de entrada" */}
-                      {ehLead(p) && (<>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                        <span style={{ flex:1, minWidth:0, fontWeight:600, fontSize:16, color:T.text, overflowWrap:"anywhere" }}>{p.parte}</span>
+                        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:"4px 10px", borderRadius:999, background:st.bg, color:st.text, whiteSpace:"nowrap" }}>{diasLabel(du, false)}</span>
+                      </div>
+                      <div style={{ marginTop:8 }}>
+                        <span style={{ display:"inline-block", fontSize:13, fontWeight:700, color:"#1B2A4A", background:"#F5C518", padding:"3px 12px", borderRadius:999 }}>{p.tipo}</span>
+                      </div>
+                      {p.processo && (
+                        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:9 }}>
+                          <span onClick={() => { setProcessoAlvoDjen(p.processo); setAba("djen"); }} title="Ver no DJEN"
+                            style={{ fontFamily:"monospace", fontSize:13, color:corProc, cursor:"pointer", overflowWrap:"anywhere" }}>{p.processo}</span>
+                          {tribunal && <span title={`Tribunal: ${tribunal}`} style={{ fontSize:12, fontWeight:700, color:corTribunal(tribunal).c, background:corTribunal(tribunal).bg, padding:"1px 7px", borderRadius:4, whiteSpace:"nowrap" }}>{tribunal}</span>}
+                          <span onClick={() => copiar(p.processo)} title="Copiar número" role="button" aria-label="Copiar número do processo" style={{ cursor:"pointer", display:"inline-flex", padding:2 }}>
+                            <Icon name="copy" size={15} color={T.textMuted} />
+                          </span>
+                        </div>
+                      )}
+                      {ehLead(p) && (
+                        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:9 }}>
                       <span onClick={(e) => { e.stopPropagation(); toggleOrcamento(p.id); }}
                         title={p.orcamentoEnviado ? "Orçamento enviado — clique para desmarcar" : "Marcar orçamento como enviado"}
                         style={{
-                          fontSize:10.5, fontWeight:700, cursor:"pointer", userSelect:"none",
+                          fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none",
                           padding:"2px 9px", borderRadius:999, display:"inline-flex", alignItems:"center", gap:4,
                           color: p.orcamentoEnviado ? "#fff" : "#2f855a",
                           background: p.orcamentoEnviado ? "#2f855a" : "transparent",
@@ -3711,7 +3747,7 @@ export default function App() {
                           aria-label="Data de entrada no processo"
                           style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity:0, cursor:"pointer", border:"none", padding:0, margin:0 }} />
                         <span style={{
-                          fontSize:10.5, fontWeight:700, userSelect:"none", pointerEvents:"none",
+                          fontSize:12, fontWeight:700, userSelect:"none", pointerEvents:"none",
                           padding:"2px 9px", borderRadius:999, display:"inline-flex", alignItems:"center", gap:4,
                           color: p.dataEntrada ? "#fff" : T.primary,
                           background: p.dataEntrada ? T.primary : "transparent",
@@ -3726,14 +3762,14 @@ export default function App() {
                             style={{ cursor:"pointer", userSelect:"none", lineHeight:1, fontSize:13, fontWeight:700, color:T.textMuted, width:18, height:18, display:"inline-flex", alignItems:"center", justifyContent:"center", borderRadius:999 }}>×</span>
                         )}
                       </span>
-                      </>)}
-                    </div>
+                        </div>
+                      )}
                     {/* Info DJEN compacta */}
                     {isDjen && (djenGatilho || djenMed) && (
                       <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                        <span style={{ fontSize:10, color:"#5c6b3a", background:"rgba(92,107,58,0.12)", padding:"1px 7px", borderRadius:3, fontWeight:600 }}>📡 DJEN</span>
-                        {djenGatilho && <span style={{ fontSize:10, color:T.textMuted, fontFamily:"monospace" }}>{djenGatilho.replace(/G[0-9]_/g, "")}</span>}
-                        {djenMed && <span style={{ fontSize:10, color:T.textMuted }}>{djenMed}</span>}
+                        <span style={{ fontSize:12, color:"#5c6b3a", background:"rgba(92,107,58,0.12)", padding:"1px 7px", borderRadius:3, fontWeight:600 }}>📡 DJEN</span>
+                        {djenGatilho && <span style={{ fontSize:12, color:T.textMuted, fontFamily:"monospace" }}>{djenGatilho.replace(/G[0-9]_/g, "")}</span>}
+                        {djenMed && <span style={{ fontSize:12, color:T.textMuted }}>{djenMed}</span>}
                       </div>
                     )}
                     {/* Toggle Monitorar no DJEN — aparece para qualquer prazo captado do DJEN */}
@@ -3763,12 +3799,68 @@ export default function App() {
                         </label>
                       </div>
                     )}
-                    {p.obs && !isDjen && <div style={{ fontSize:11, color:T.textSoft, marginTop:4, fontStyle:"italic" }}>{p.obs}</div>}
+                    {p.obs && !isDjen && <div style={{ fontSize:13, color:T.textSoft, marginTop:11, paddingTop:11, borderTop:`1px solid ${T.border}`, lineHeight:1.45 }}>{p.obs}</div>}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginTop:12 }}>
+                        <button onClick={() => toggleConcluidoComRecorrencia(p.id)}
+                          style={{ border:`1.5px solid ${T.success}`, background:"transparent", color:T.success, borderRadius:999, fontSize:13, fontWeight:700, padding:"7px 14px", cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6 }}>
+                          <Icon name="check" size={15} color={T.success} /> Concluir
+                        </button>
+                        <AcoesMenu prazo={p} onEdit={openEdit} onDelete={setConfirmDel} onToast={toast} T={T} />
+                      </div>
+                    </div>
                   </div>
-                  <AcoesMenu prazo={p} onEdit={openEdit} onDelete={setConfirmDel} onToast={toast} T={T} />
-                </div>
-              );
-            })}
+                );
+              };
+              const agrupar = ordenacao === "data_asc";
+              const drawerAberto = concluidosAbertos || filtro === "concluido" || !!busca;
+              return (<>
+                {agrupar
+                  ? GRUPOS.map(g => {
+                      const itens = pendentes.filter(p => grupoDe(p) === g.k);
+                      if (!itens.length) return null;
+                      return (
+                        <div key={g.k} style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, margin:"8px 2px 0", fontSize:14, fontWeight:700, color:T.text }}>
+                            <span style={{ width:9, height:9, borderRadius:"50%", background:STATUS_CFG[g.st][modo].c, display:"inline-block" }} />
+                            {g.label}
+                            <span style={{ fontWeight:500, color:T.textMuted }}>· {itens.length} {itens.length === 1 ? "prazo" : "prazos"}</span>
+                          </div>
+                          {itens.map(renderCard)}
+                        </div>
+                      );
+                    })
+                  : pendentes.map(renderCard)}
+                {concluidos.length > 0 && (
+                  <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:16, padding:"4px 14px", marginTop:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, padding:"6px 0" }}>
+                      <button onClick={() => setConcluidosAbertos(o => !o)}
+                        style={{ background:"none", border:"none", cursor:"pointer", padding:"6px 0", display:"inline-flex", alignItems:"center", gap:6, fontSize:14, fontWeight:700, color:T.text }}>
+                        <Icon name={drawerAberto ? "chevD" : "chevR"} size={16} color={T.text} /> Concluídos ({concluidos.length})
+                      </button>
+                      <button onClick={() => setConfirmDelConcl(concluidos.map(p => p.id))}
+                        style={{ background:"none", border:"none", cursor:"pointer", padding:"6px 4px", display:"inline-flex", alignItems:"center", gap:5, fontSize:13, fontWeight:600, color:T.danger }}>
+                        <Icon name="trash" size={14} color={T.danger} /> Excluir todos
+                      </button>
+                    </div>
+                    {drawerAberto && concluidos.map(p => (
+                      <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderTop:`1px solid ${T.border}` }}>
+                        <Icon name="check" size={16} color={T.success} />
+                        <div onClick={() => openEdit(p)} style={{ flex:1, minWidth:0, cursor:"pointer" }}>
+                          <div style={{ fontSize:13, color:T.textSoft, overflowWrap:"anywhere" }}>{p.parte} · {p.tipo}</div>
+                          <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{p.concluidoEm ? `concluído em ${fmt(p.concluidoEm)}` : `prazo de ${fmt(p.dataLimite)}`}</div>
+                        </div>
+                        <span onClick={() => toggleConcluidoComRecorrencia(p.id)} title="Reabrir prazo" role="button" aria-label="Reabrir prazo" style={{ cursor:"pointer", display:"inline-flex", padding:6 }}>
+                          <Icon name="undo" size={16} color={T.textMuted} />
+                        </span>
+                        <span onClick={() => setConfirmDel(p.id)} title="Excluir prazo" role="button" aria-label="Excluir prazo" style={{ cursor:"pointer", display:"inline-flex", padding:6 }}>
+                          <Icon name="trash" size={16} color={T.textMuted} />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>);
+            })()}
           </div>
         </>
       )}
@@ -3794,7 +3886,7 @@ export default function App() {
           <div style={{ padding:"16px 16px 80px" }}>
             <div style={{ marginBottom:14 }}>
               <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text, letterSpacing:"-0.01em" }}>Tarefas</h2>
-              <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>{tarefas.filter(t=>!t.concluida).length} pendente(s) · arraste para reordenar</div>
+              <div style={{ fontSize:12, color:T.textMuted, marginTop:3 }}>{tarefas.filter(t=>!t.concluida).length} pendente(s) · arraste para reordenar</div>
             </div>
             {/* Cards de contadores */}
             <div style={{ overflowX:"auto", display:"flex", gap:10, marginBottom:14, paddingBottom:4 }} className="hide-scrollbar">
@@ -3817,17 +3909,17 @@ export default function App() {
                       transition:"all 0.15s",
                       transform: ativo ? "translateY(-2px)" : "translateY(0)",
                     }}>
-                    <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
+                    <div style={{ fontSize:12, color:T.textMuted, fontWeight:600, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
                     <div style={{ fontSize:24, fontWeight:800, color:cor, lineHeight:1, letterSpacing:"-0.02em" }}>{contTar[key]}</div>
                   </button>
                 );
               })}
             </div>
             {filtroTarefa !== "todas" && (
-              <div style={{ fontSize:11, color:T.textMuted, display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+              <div style={{ fontSize:12, color:T.textMuted, display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
                 {tarefasFiltradas.length} resultado(s)
                 <button onClick={() => setFiltroTarefa("todas")}
-                  style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                  style={{ background:"none", border:"none", color:T.primary, cursor:"pointer", fontSize:12, fontWeight:600 }}>
                   Limpar
                 </button>
               </div>
@@ -3856,7 +3948,7 @@ export default function App() {
         <div style={{ padding:"16px 16px 80px" }}>
           <div style={{ marginBottom:14 }}>
             <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:T.text }}>Assinaturas</h2>
-            <div style={{ fontSize:11, color:T.textMuted, marginTop:3 }}>Kit de contratação via ZapSign: Procuração + Declaração + Contrato em 1 link</div>
+            <div style={{ fontSize:12, color:T.textMuted, marginTop:3 }}>Kit de contratação via ZapSign: Procuração + Declaração + Contrato em 1 link</div>
           </div>
           <button onClick={() => { setKitPrazo({}); setKitArqs({}); setKitStatus("idle"); setKitSignUrl(""); setKitModal(true); }}
             style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"12px 20px", borderRadius:12, border:"none", background:"#F5C518", color:"#1B2A4A", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px #F5C51855" }}>
@@ -3923,7 +4015,7 @@ export default function App() {
           <div style={{ background:T.card, borderRadius:16, width:"100%", maxWidth:540, maxHeight:"86vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
             <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:10, color:T.textMuted, textTransform:"uppercase", letterSpacing:1, marginBottom:2 }}>{fmtLong(hoje)}</div>
+                <div style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", letterSpacing:1, marginBottom:2 }}>{fmtLong(hoje)}</div>
                 <h2 style={{ margin:0, fontSize:17, color:T.primary, fontWeight:700 }}>Resumo do dia</h2>
               </div>
               <button onClick={() => setResumoAberto(false)} style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
@@ -3942,7 +4034,7 @@ export default function App() {
                     { titulo:"Próximos (até 5 du)", color:STATUS_CFG.proximo[modo].c, items:resumoData.proximos },
                   ].map(({titulo, color, items}) => items.length > 0 && (
                     <div key={titulo} style={{ marginBottom:14 }}>
-                      <div style={{ fontSize:11, color, fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>{titulo} · {items.length}</div>
+                      <div style={{ fontSize:12, color, fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>{titulo} · {items.length}</div>
                       {items.map(p => {
                         const du = diasUteisRestantes(p.dataLimite);
                         return (
@@ -3950,12 +4042,12 @@ export default function App() {
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
                               <div style={{ minWidth:0, flex:1 }}>
                                 <div style={{ fontSize:13, fontWeight:600, color:T.text, marginBottom:2 }}>{p.parte}</div>
-                                <div style={{ fontSize:11, color:T.textSoft }}>{p.tipo} · {p.responsavel}</div>
-                                {p.obs && <div style={{ fontSize:11, color:T.textMuted, fontStyle:"italic", marginTop:3 }}>{p.obs}</div>}
+                                <div style={{ fontSize:12, color:T.textSoft }}>{p.tipo} · {p.responsavel}</div>
+                                {p.obs && <div style={{ fontSize:12, color:T.textMuted, fontStyle:"italic", marginTop:3 }}>{p.obs}</div>}
                               </div>
                               <div style={{ textAlign:"right", flexShrink:0 }}>
                                 <div style={{ fontSize:13, fontWeight:700, color }}>{fmt(p.dataLimite)}</div>
-                                <div style={{ fontSize:10, color:T.textMuted, marginTop:1 }}>{diasLabel(du, p.concluido)}</div>
+                                <div style={{ fontSize:12, color:T.textMuted, marginTop:1 }}>{diasLabel(du, p.concluido)}</div>
                               </div>
                             </div>
                           </div>
@@ -4013,7 +4105,7 @@ export default function App() {
             </div>
             {cmdParsed && (
               <div style={{ background:T.successSoft, border:`1px solid ${T.success}33`, borderRadius:10, padding:"12px", marginBottom:12 }}>
-                <div style={{ fontSize:10, color:T.success, fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Interpretado</div>
+                <div style={{ fontSize:12, color:T.success, fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Interpretado</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
                   {[
                     { label:"Parte",       val:cmdParsed.parte || "—",       warn:!cmdParsed.parte },
@@ -4024,7 +4116,7 @@ export default function App() {
                     { label:"Obs",         val:cmdParsed.obs || "—" },
                   ].map(({ label, val, warn }) => (
                     <div key={label} style={{ background:T.card, borderRadius:6, padding:"6px 9px" }}>
-                      <div style={{ fontSize:9, color:T.textMuted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
+                      <div style={{ fontSize:12, color:T.textMuted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
                       <div style={{ fontSize:12, color:warn?T.danger:T.text, fontWeight:500 }}>{val}</div>
                     </div>
                   ))}
@@ -4074,7 +4166,7 @@ export default function App() {
               )}
               <div style={LBL}>Padrão</div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-                {TIPOS_DEFAULT.map(t => <span key={t} style={{ background:T.cardAlt, borderRadius:16, padding:"4px 10px", fontSize:11, color:T.textSoft }}>{t}</span>)}
+                {TIPOS_DEFAULT.map(t => <span key={t} style={{ background:T.cardAlt, borderRadius:16, padding:"4px 10px", fontSize:12, color:T.textSoft }}>{t}</span>)}
               </div>
             </div>
           </div>
@@ -4088,7 +4180,7 @@ export default function App() {
             <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <h2 style={{ margin:0, fontSize:16, color:T.text, fontWeight:700 }}>Feriados</h2>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>Excluídos da contagem</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>Excluídos da contagem</div>
               </div>
               <button onClick={() => setFeriadoModal(false)} style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
                 <Icon name="close" size={18} color={T.textSoft} />
@@ -4116,7 +4208,7 @@ export default function App() {
                   <div key={d} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.warnSoft+"55", border:`1px solid ${T.warn}33`, borderRadius:8, padding:"8px 12px" }}>
                     <div>
                       <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{fmt(d)}</div>
-                      <div style={{ fontSize:11, color:T.textSoft }}>{feriadosNomes[d] || "—"}</div>
+                      <div style={{ fontSize:12, color:T.textSoft }}>{feriadosNomes[d] || "—"}</div>
                     </div>
                     <button onClick={() => {
                       setFeriados(prev => prev.filter(x => x !== d));
@@ -4140,7 +4232,7 @@ export default function App() {
             <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:6 }}>
               <div>
                 <div style={{ fontSize:16, fontWeight:700, color:T.primary }}>Relatório</div>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:1 }}>{exportModal.hoje} · {exportModal.rows.length} prazo(s)</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:1 }}>{exportModal.hoje} · {exportModal.rows.length} prazo(s)</div>
               </div>
               <div className="no-print" style={{ display:"flex", gap:6 }}>
                 <button onClick={() => window.print()} style={{ ...BTN_PRIMARY, padding:"8px 14px", fontSize:13 }}>
@@ -4156,7 +4248,7 @@ export default function App() {
                 <thead>
                   <tr style={{ background:T.primary }}>
                     {["Parte","Tipo","Processo","Venc.","Dias","Status","Prior.","Resp.","Obs"].map(h => (
-                      <th key={h} style={{ padding:"8px 10px", textAlign:"left", color:T.primaryText, fontSize:10, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding:"8px 10px", textAlign:"left", color:T.primaryText, fontSize:12, letterSpacing:0.5, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -4165,13 +4257,13 @@ export default function App() {
                     <tr key={i} style={{ background: i%2===0?T.card:T.cardAlt }}>
                       <td style={{ padding:"7px 10px", fontWeight:600, color:T.text, borderBottom:`1px solid ${T.border}` }}>{r.parte}</td>
                       <td style={{ padding:"7px 10px", color:T.textSoft, borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{r.tipo}</td>
-                      <td style={{ padding:"7px 10px", fontFamily:"monospace", fontSize:10, color:T.textMuted, borderBottom:`1px solid ${T.border}` }}>{r.processo}</td>
+                      <td style={{ padding:"7px 10px", fontFamily:"monospace", fontSize:12, color:T.textMuted, borderBottom:`1px solid ${T.border}` }}>{r.processo}</td>
                       <td style={{ padding:"7px 10px", fontWeight:600, color:r.stColor, borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{r.data}</td>
                       <td style={{ padding:"7px 10px", color:T.textSoft, borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{r.duLabel}</td>
-                      <td style={{ padding:"7px 10px", borderBottom:`1px solid ${T.border}` }}><span style={{ background:r.stPill, color:r.stText, borderRadius:12, padding:"2px 8px", fontSize:10, fontWeight:700 }}>{r.stLabel}</span></td>
-                      <td style={{ padding:"7px 10px", borderBottom:`1px solid ${T.border}` }}><span style={{ background:r.prBg, color:r.prColor, borderRadius:12, padding:"2px 8px", fontSize:10, fontWeight:700 }}>{r.prLabel}</span></td>
+                      <td style={{ padding:"7px 10px", borderBottom:`1px solid ${T.border}` }}><span style={{ background:r.stPill, color:r.stText, borderRadius:12, padding:"2px 8px", fontSize:12, fontWeight:700 }}>{r.stLabel}</span></td>
+                      <td style={{ padding:"7px 10px", borderBottom:`1px solid ${T.border}` }}><span style={{ background:r.prBg, color:r.prColor, borderRadius:12, padding:"2px 8px", fontSize:12, fontWeight:700 }}>{r.prLabel}</span></td>
                       <td style={{ padding:"7px 10px", color:T.textSoft, borderBottom:`1px solid ${T.border}` }}>{r.responsavel}</td>
-                      <td style={{ padding:"7px 10px", color:T.textMuted, fontSize:10, borderBottom:`1px solid ${T.border}` }}>{r.obs||"—"}</td>
+                      <td style={{ padding:"7px 10px", color:T.textMuted, fontSize:12, borderBottom:`1px solid ${T.border}` }}>{r.obs||"—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -4192,7 +4284,7 @@ export default function App() {
             <div style={{ padding:"16px 18px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <h2 style={{ margin:0, fontSize:16, color:T.text, fontWeight:700 }}>Clientes</h2>
-                <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>{clientes.length} cadastrado(s)</div>
+                <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{clientes.length} cadastrado(s)</div>
               </div>
               <button onClick={() => { setClienteModal(false); setClienteEditId(null); setClienteForm({ nome:"", tipo:"PJ", obs:"" }); }}
                 style={{ background:"transparent", border:"none", padding:6, cursor:"pointer", color:T.textSoft, display:"flex" }}>
@@ -4246,10 +4338,10 @@ export default function App() {
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                           <span style={{ fontSize:13, fontWeight:600, color:T.text }}>{c.nome}</span>
-                          <span style={{ fontSize:9, background:T.cardAlt, color:T.textSoft, borderRadius:8, padding:"1px 6px", fontWeight:700 }}>{c.tipo}</span>
+                          <span style={{ fontSize:12, background:T.cardAlt, color:T.textSoft, borderRadius:8, padding:"1px 6px", fontWeight:700 }}>{c.tipo}</span>
                         </div>
-                        {c.obs && <div style={{ fontSize:11, color:T.textMuted, marginTop:2 }}>{c.obs}</div>}
-                        <div style={{ fontSize:10, color:T.textMuted, marginTop:2 }}>{qtdPrazos} prazo(s) ativo(s)</div>
+                        {c.obs && <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{c.obs}</div>}
+                        <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>{qtdPrazos} prazo(s) ativo(s)</div>
                       </div>
                       <button onClick={() => { setClienteForm({ nome:c.nome, tipo:c.tipo, obs:c.obs||"" }); setClienteEditId(c.id); }}
                         style={{ background:"transparent", border:"none", padding:5, cursor:"pointer", color:T.textSoft, display:"flex" }}>
@@ -4314,7 +4406,7 @@ export default function App() {
                 ].map(({label,val}) => (
                   <div key={label}>
                     <div style={{ fontSize:18, fontWeight:800, color:T.primary }}>{val}</div>
-                    <div style={{ fontSize:10, color:T.textMuted, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
+                    <div style={{ fontSize:12, color:T.textMuted, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -4354,7 +4446,7 @@ export default function App() {
                 <Icon name="upload" size={16} color={T.textSoft} /> Restaurar de arquivo
               </button>
 
-              <div style={{ fontSize:11, color:T.textMuted, lineHeight:1.6, padding:"10px 12px", background:T.cardAlt, borderRadius:8 }}>
+              <div style={{ fontSize:12, color:T.textMuted, lineHeight:1.6, padding:"10px 12px", background:T.cardAlt, borderRadius:8 }}>
                 <strong>💡 Dica:</strong> salve o arquivo no Google Drive, iCloud ou Dropbox. Faça backup pelo menos 1x por semana, ou após adicionar muitos prazos.
               </div>
             </div>
@@ -4428,14 +4520,14 @@ export default function App() {
                         }} placeholder="15" style={INP} />
                       </label>
                     </div>
-                    <div style={{ fontSize:10.5, color:T.textMuted, lineHeight:1.45 }}>
+                    <div style={{ fontSize:12, color:T.textMuted, lineHeight:1.45 }}>
                       ⚠ O dia informado <strong>conta como o 1º dia útil</strong>. Pelo CPC art. 224, informe o 1º dia útil <em>seguinte</em> à publicação/intimação — não o dia dela.
                     </div>
                     {form.dataLimite && (
                       <div style={{ background:T.primarySoft, borderRadius:8, padding:"8px 12px", display:"flex", alignItems:"center", gap:8 }}>
                         <Icon name="calendar" size={18} color={T.primary} />
                         <div>
-                          <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, textTransform:"uppercase" }}>Calculado</div>
+                          <div style={{ fontSize:12, color:T.textMuted, fontWeight:600, textTransform:"uppercase" }}>Calculado</div>
                           <div style={{ fontSize:15, fontWeight:700, color:T.primary }}>{fmt(form.dataLimite)}</div>
                         </div>
                       </div>
@@ -4471,7 +4563,7 @@ export default function App() {
                   <option value="anual">Anual</option>
                 </select>
                 {form.recorrencia && form.recorrencia !== "none" && (
-                  <div style={{ fontSize:11, color:T.textMuted, marginTop:4, fontStyle:"italic" }}>Ao concluir, será criado automaticamente um novo prazo na próxima data.</div>
+                  <div style={{ fontSize:12, color:T.textMuted, marginTop:4, fontStyle:"italic" }}>Ao concluir, será criado automaticamente um novo prazo na próxima data.</div>
                 )}
               </label>
               <label>
@@ -4574,9 +4666,9 @@ export default function App() {
                 <div key={p.id} style={{ background:T.bg, borderRadius:8, padding:"8px 12px", fontSize:12, border:`1px solid ${T.border}`, display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
                   <span style={{ fontWeight:700, color:T.text }}>{p.processo || "—"}</span>
                   {p.parte && <span style={{ color:T.textMuted }}>· {p.parte}</span>}
-                  {p.tipo && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:11, fontWeight:600, background:T.primarySoft||"#e8ecf4", color:T.primary }}>{p.tipo}</span>}
+                  {p.tipo && <span style={{ padding:"1px 8px", borderRadius:10, fontSize:12, fontWeight:600, background:T.primarySoft||"#e8ecf4", color:T.primary }}>{p.tipo}</span>}
                   {p.dataLimite && <span style={{ color:T.textMuted }}>· vence {new Date(p.dataLimite + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
-                  {p.concluido && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:10, background:"#d4edda", color:"#155724", fontWeight:700 }}>Concluído</span>}
+                  {p.concluido && <span style={{ padding:"1px 7px", borderRadius:10, fontSize:12, background:"#d4edda", color:"#155724", fontWeight:700 }}>Concluído</span>}
                 </div>
               ))}
             </div>
@@ -4591,6 +4683,25 @@ export default function App() {
         </div>
       )}
 
+      {confirmDelConcl && (
+        <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
+          <div style={{ background:T.card, borderRadius:16, padding:22, maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}>
+              <div style={{ background:T.dangerSoft, borderRadius:"50%", padding:14, display:"flex" }}>
+                <Icon name="alert" size={28} color={T.danger} />
+              </div>
+            </div>
+            <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:5 }}>Excluir {confirmDelConcl.length} prazo(s) concluído(s)?</div>
+            <div style={{ fontSize:13, color:T.textSoft, marginBottom:18 }}>Esta ação não pode ser desfeita. Os prazos pendentes não são afetados e as intimações vinculadas continuam como estão.</div>
+            <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+              <button onClick={() => setConfirmDelConcl(null)} style={BTN_GHOST}>Cancelar</button>
+              <button onClick={() => excluirConcluidos(confirmDelConcl)} style={{ background:T.danger, border:"none", borderRadius:10, padding:"10px 18px", color:"#fff", fontWeight:600, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", gap:6 }}>
+                <Icon name="trash" size={14} color="#fff" /> Excluir todos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {confirmDel && (
         <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16, pointerEvents:"none" }}>
           <div style={{ background:T.card, borderRadius:16, padding:22, maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 20px 60px #00000033", pointerEvents:"all", border:`1px solid ${T.border}` }}>
@@ -4602,7 +4713,7 @@ export default function App() {
             <div style={{ fontSize:15, fontWeight:700, color:T.text, marginBottom:5 }}>Excluir este prazo?</div>
             <div style={{ fontSize:12, color:T.textMuted, marginBottom:(prazos.find(p => p.id === confirmDel) || {}).intimId ? 6 : 18 }}>Esta ação não pode ser desfeita.</div>
             {(prazos.find(p => p.id === confirmDel) || {}).intimId && (
-              <div style={{ fontSize:12, color:T.textSoft, marginBottom:18 }}>A intimação que originou o prazo perde o vínculo e, se estava Tratada, volta para NOVO.</div>
+              <div style={{ fontSize:12, color:T.textSoft, marginBottom:18 }}>{(prazos.find(p => p.id === confirmDel) || {}).concluido ? "Prazo já cumprido: a intimação que o originou continua como está (não volta para NOVO)." : "A intimação que originou o prazo perde o vínculo e, se estava Tratada, volta para NOVO."}</div>
             )}
             <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
               <button onClick={() => setConfirmDel(null)} style={BTN_GHOST}>Cancelar</button>
