@@ -163,8 +163,12 @@ Deno.serve(async (req) => {
     }
 
     // Envio SMTP Zoho. Remetente = conta autenticada (exigência do Zoho).
+    // Só volta para a fila se o servidor NÃO aceitou a mensagem. Erro depois do
+    // aceite (ex.: ao fechar a conexão) não é falha de envio — destravar aí
+    // permitiria reenviar um e-mail que já saiu (apontado na revisão do PR #21).
+    let client: SMTPClient | null = null;
     try {
-      const client = new SMTPClient({
+      client = new SMTPClient({
         connection: {
           hostname: SMTP_HOST,
           port: SMTP_PORTA,
@@ -172,18 +176,15 @@ Deno.serve(async (req) => {
           auth: { username: REMETENTE, password: smtpPass },
         },
       });
-      try {
-        await client.send({
-          from: REMETENTE,
-          to: destinatarios,
-          bcc: copiasOcultas(),
-          subject: assunto,
-          content: corpo,
-        });
-      } finally {
-        await client.close();
-      }
+      await client.send({
+        from: REMETENTE,
+        to: destinatarios,
+        bcc: copiasOcultas(),
+        subject: assunto,
+        content: corpo,
+      });
     } catch (e) {
+      try { await client?.close(); } catch { /* conexão já caiu */ }
       // Não saiu: devolve para a fila de aprovação para poder tentar de novo.
       await supabase
         .from("alvaras")
@@ -192,6 +193,8 @@ Deno.serve(async (req) => {
         .eq("status", "enviando");
       return json({ error: `Falha no SMTP: ${e instanceof Error ? e.message : e}` }, 502);
     }
+    // Mensagem aceita pelo servidor: falha ao fechar a conexão não muda nada.
+    try { await client?.close(); } catch { /* ignorado de propósito */ }
 
     // Só marca 'enviado' APÓS o envio bem-sucedido.
     const { error: upErr } = await supabase

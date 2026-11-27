@@ -3016,14 +3016,18 @@ function PainelAlvaras({ T, toast, user }) {
 
   // Destrava um envio interrompido (status preso em 'enviando'). Só troca se
   // ainda estiver 'enviando' — não desfaz um 'enviado' gravado no meio tempo.
+  // Só libera se o 'enviando' tem mais de 3 min: a função de envio é encerrada
+  // pelo Supabase antes disso, então não há envio ainda rodando em outra aba
+  // (apontado na revisão do PR #21). A condição vai no próprio UPDATE (atômico).
   const liberarReenvio = async (a) => {
     if (!window.confirm("Confirma que o e-mail NÃO foi enviado? O alvará volta para aguardando aprovação.")) return;
     const sb = await initSupabase();
+    const limite = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const { data, error } = await sb.from("alvaras")
       .update({ status: "aguardando_aprovacao", atualizado_em: new Date().toISOString() })
-      .eq("id", a.id).eq("status", "enviando").select().maybeSingle();
+      .eq("id", a.id).eq("status", "enviando").lt("atualizado_em", limite).select().maybeSingle();
     if (error) { toast("Falha ao liberar: " + error.message, "danger"); return; }
-    if (!data) { toast("O status mudou nesse meio tempo — recarregando", "info"); await carregar(); setDetalhe(null); return; }
+    if (!data) { toast("O envio começou há menos de 3 minutos ou já terminou — aguarde e reabra o alvará", "info"); await carregar(); setDetalhe(null); return; }
     toast("Liberado para reenvio", "success");
     setDetalhe(data);
     carregar();
@@ -3207,7 +3211,7 @@ function PainelAlvaras({ T, toast, user }) {
                     <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>Envio interrompido</div>
                     <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
                       Este alvará ficou marcado como “enviando”. Confira na pasta de enviados de contato@martinscorreadasilva.com.br
-                      se o e-mail saiu. Só libere para reenvio se ele <strong>não</strong> saiu.
+                      se o e-mail saiu. Só libere para reenvio se ele <strong>não</strong> saiu (a liberação só é aceita 3 minutos após o início do envio).
                     </div>
                     <button onClick={() => liberarReenvio(a)}
                       style={{ background:"transparent", border:"1px solid #2b6cb0", color:"#2b6cb0", borderRadius:9, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>

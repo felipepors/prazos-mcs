@@ -144,7 +144,23 @@ Deno.serve(async (req) => {
       .select()
       .single();
 
-    if (insErr) return json({ error: `Falha ao gravar alvara: ${insErr.message}` }, 500);
+    if (insErr) {
+      // 23505 = índice único (user_id, numero_alvara): outra requisição gravou o
+      // mesmo alvará entre a busca acima e este insert (ex.: duas abas).
+      if (insErr.code === "23505") {
+        const { data: existente } = await supabase
+          .from("alvaras").select("*").eq("numero_alvara", alvara.numero_alvara).maybeSingle();
+        if (storagePath && storagePath !== existente?.pdf_path) {
+          await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+        }
+        return json({
+          error: `Alvara ${alvara.numero_alvara} ja foi cadastrado`,
+          duplicado: true,
+          alvara_existente: existente,
+        }, 409);
+      }
+      return json({ error: `Falha ao gravar alvara: ${insErr.message}` }, 500);
+    }
 
     return json({
       ok: true,
