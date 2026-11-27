@@ -2262,6 +2262,8 @@ const INTIM_URG_DARK = {
 };
 const INTIM_DEOAB_DARK = { c:"#1B2A4A", bg:"#F5C518" };
 const INTIM_STATUS_UM = { LIDO:"Lida", TRATADO:"Tratada", IGNORADO:"Ignorada" };
+// v45 — fundo das intimações já lidas/arquivadas (mais "apagado" que o cartão branco).
+const INTIM_LIDA_BG = { light: "#F1EFE8", dark: "#131C30" };
 // v43 — título do dia: "Hoje", "Ontem" ou o dia da semana, e a data por extenso
 function intimTituloDia(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
@@ -2278,7 +2280,6 @@ function intimTituloDia(iso) {
   const s = SEM[d.getDay()];
   return { titulo: s.charAt(0).toUpperCase() + s.slice(1), sub: data };
 }
-const INTIM_STATUS_LABEL = { NOVO:"Novas", LIDO:"Lidas", TRATADO:"Tratadas", IGNORADO:"Ignoradas" };
 
 const CORES_TRIBUNAL={DEOAB:['#1B2A4A','#F5C518'],TJRS:['#1B5E20','#E3F2E4'],TJRJ:['#B23A00','#FCE9DE'],TJSP:['#7B1FA2','#F3E5F8'],TJSC:['#546E7A','#ECEFF1'],TJPR:['#AD1457','#FCE4EC'],TJDFT:['#4527A0','#EAE4F7'],TJDF:['#4527A0','#EAE4F7'],TRF4:['#01579B','#E1F0FA'],TJMG:['#795548','#EFE7E4'],TJBA:['#C62828','#FCE4E4'],TJGO:['#0277BD','#E0F2FB'],TJCE:['#00838F','#DCF2F4'],TJPE:['#558B2F','#EDF4E2'],TJPA:['#283593','#E4E7F5'],TJMA:['#6A1B9A','#F0E4F7'],TJMT:['#00796B','#DDF1EE'],TJSE:['#BF360C','#FBE6DE'],TJES:['#AD5A00','#FBEEDD'],TJPB:['#33691E','#EAF2DF'],TJRN:['#880E4F','#FBE2EE'],TJAL:['#0D47A1','#E2ECFA'],TJPI:['#4E342E','#EDE6E4'],TJMS:['#00600F','#DEEFE1'],TJAM:['#1A237E','#E3E5F3'],STJ:['#8E1A2F','#F7E4E7'],STF:['#212121','#EAEAEA'],TST:['#455A64','#E8EDEF'],TSE:['#5D4037','#EDE7E4'],TRF1:['#0288D1','#E0F3FB'],TRF2:['#00897B','#DDF2EF'],TRF3:['#5E35B1','#ECE5F7'],TRF5:['#C2185B','#FBE4EC'],TRF6:['#004D40','#DBEFEA']};
 const corTribunal=(s)=>{const t=String(s||'').toUpperCase();if(!t)return{c:'#4B5563',bg:'#EDF0F4'};const fix=CORES_TRIBUNAL[t];if(fix)return{c:fix[0],bg:fix[1]};let h=0;for(let i=0;i<t.length;i++)h=(h*131+t.charCodeAt(i))%1000000007;const mat=(h*47)%360,sat=64+(Math.floor(h/360)%14),lum=26+(Math.floor(h/7)%6),bgl=91+(Math.floor(h/13)%4);return{c:'hsl('+mat+','+sat+'%,'+lum+'%)',bg:'hsl('+mat+','+(sat+4)+'%,'+bgl+'%)'};};
@@ -2378,7 +2379,6 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
   const [fStatus, setFStatus] = useState(() => new Set(["NOVO", "LIDO"]));
   const [fTrib, setFTrib] = useState("");
   const [fUrg, setFUrg] = useState("");
-  const [soConferir, setSoConferir] = useState(false);
   const [busca, setBusca] = useState("");
   const [detalhe, setDetalhe] = useState(null);
   const [buscando, setBuscando] = useState(false);
@@ -2523,7 +2523,6 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
       if (fStatus.size && !fStatus.has(i.status)) return false;
       if (fTrib && i.tribunal !== fTrib) return false;
       if (fUrg && i.urgencia !== fUrg) return false;
-      if (soConferir && !i.requer_conferencia) return false;
       if (q) {
         const alvoTxt = `${clientes[i.numero_processo] || ""} ${i.partes || ""} ${i.trecho || ""} ${i.rotulo || ""}`.toLowerCase();
         const bateDig = qDig.length >= 4 && String(i.numero_processo_digitos || "").includes(qDig);
@@ -2531,7 +2530,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
       }
       return true;
     });
-  }, [items, clientes, fStatus, fTrib, fUrg, soConferir, busca]);
+  }, [items, clientes, fStatus, fTrib, fUrg, busca]);
 
   const porDia = useMemo(() => {
     const g = new Map();
@@ -2540,7 +2539,8 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
       if (!g.has(d)) g.set(d, []);
       g.get(d).push(i);
     }
-    return [...g.entries()];
+    // v45 — dentro de cada dia, as novas vêm primeiro (sort estável mantém o resto).
+    return [...g.entries()].map(([d, l]) => [d, [...l].sort((a, b) => (b.status === "NOVO") - (a.status === "NOVO"))]);
   }, [filtradas]);
 
   // v37 — a busca filtra o que está carregado; com busca ativa, traz o restante.
@@ -2549,11 +2549,30 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [busca, temMais]);
 
-  const toggleStatus = (s) => setFStatus((prev) => {
+  // v45 — um chip pode valer por mais de um status (Arquivadas = Tratadas + Ignoradas).
+  const toggleStatus = (lista) => setFStatus((prev) => {
     const n = new Set(prev);
-    if (n.has(s)) n.delete(s); else n.add(s);
+    const ligado = lista.every((s) => n.has(s));
+    lista.forEach((s) => { if (ligado) n.delete(s); else n.add(s); });
     return n;
   });
+
+  // Contagem real no banco: as NOVO são carregadas até 1.000 e as demais paginam.
+  const [contagem, setContagem] = useState({});
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const sb = await initSupabase();
+      if (!sb) return;
+      const conta = async (sts) => {
+        const { count } = await sb.from("intimacoes_oab").select("id", { count: "exact", head: true }).in("status", sts);
+        return count ?? null;
+      };
+      const [novas, lidas, arquivadas] = await Promise.all([conta(["NOVO"]), conta(["LIDO"]), conta(["TRATADO", "IGNORADO"])]);
+      if (vivo) setContagem({ novas, lidas, arquivadas });
+    })();
+    return () => { vivo = false; };
+  }, [items]);
 
   const chip = (ativo) => ({
     border: `1px solid ${ativo ? "#F5C518" : T.border}`,
@@ -2616,9 +2635,15 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10, alignItems: "center" }}>
-        {Object.keys(INTIM_STATUS_LABEL).map((s) => (
-          <button key={s} onClick={() => toggleStatus(s)} style={chip(fStatus.has(s))}>
-            {INTIM_STATUS_LABEL[s]}
+        {[
+          { rotulo: "Novas", sts: ["NOVO"], n: contagem.novas ?? items.filter((i) => i.status === "NOVO").length },
+          { rotulo: "Lidas", sts: ["LIDO"], n: contagem.lidas },
+          { rotulo: "Arquivadas", sts: ["TRATADO", "IGNORADO"], n: contagem.arquivadas,
+            dica: "Tratadas (viraram prazo) e ignoradas" },
+        ].map(({ rotulo, sts, n, dica }) => (
+          <button key={rotulo} onClick={() => toggleStatus(sts)} title={dica}
+            style={chip(sts.every((s) => fStatus.has(s)))}>
+            {rotulo}{n != null ? ` (${n})` : ""}
           </button>
         ))}
         <span aria-hidden="true" style={{ width: 1, height: 20, background: T.borderStrong, margin: "0 4px" }} />
@@ -2633,8 +2658,6 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
             {u === "alta" ? "Urgente" : u === "media" ? "Média" : "Baixa"}
           </button>
         ))}
-        <span aria-hidden="true" style={{ width: 1, height: 20, background: T.borderStrong, margin: "0 4px" }} />
-        <button onClick={() => setSoConferir(!soConferir)} style={chip(soConferir)}>⚠ Conferir</button>
         <input value={busca} onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar processo, parte ou texto…"
           style={{ flex: 1, minWidth: 180, border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 8, padding: "5px 10px", fontSize: 12 }} />
@@ -2657,7 +2680,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
             <span aria-hidden="true" style={{ width: 4, alignSelf: "stretch", minHeight: 26, borderRadius: 2, background: "#F5C518", flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "0 10px" }}>
               <span style={{ fontSize: 19, fontWeight: 700, color: T.text }}>{td.titulo}</span>
-              {td.sub && <span style={{ fontSize: 15, color: T.textSoft }}>{td.sub}</span>}
+              {td.sub && <span style={{ fontSize: 16, fontWeight: 600, color: T.text }}>{td.sub}</span>}
             </div>
             <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 8 }}>
               {nNovas > 0 && (
@@ -2679,6 +2702,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
               : ((escuro ? INTIM_URG_DARK : INTIM_URG)[i.urgencia] || (escuro ? INTIM_URG_DARK : INTIM_URG).baixa);
             const nova = i.status === "NOVO";
             const tratada = i.status === "TRATADO" || i.status === "IGNORADO";
+            const corNova = escuro ? "#85B7EB" : "#185FA5";
             const sigiloso = i.classificacao === "SIGILOSO" || /^processo sigiloso/i.test(i.trecho || "") || /^processo sigiloso/i.test(i.rotulo || "");
             const cliente = clientes[i.numero_processo];
             const partesOk = i.partes && !/SIGILO/i.test(i.partes) ? i.partes : "";
@@ -2691,15 +2715,20 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
             return (
               <div key={i.id} onClick={() => setDetalhe(i)}
                 style={{
-                  background: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
-                  padding: 16, cursor: "pointer", opacity: tratada ? 0.75 : 1,
-                  display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "0 1px 3px #0000000a",
+                  // v45 — nova: branca, sombra e faixa azul à esquerda; lida/arquivada:
+                  // fundo bege-acinzentado, sem sombra — "afunda" na lista.
+                  background: nova ? T.card : (escuro ? INTIM_LIDA_BG.dark : INTIM_LIDA_BG.light),
+                  border: `1px solid ${T.border}`,
+                  borderLeft: nova ? `4px solid ${corNova}` : `1px solid ${T.border}`,
+                  borderRadius: 16,
+                  padding: nova ? "16px 16px 16px 13px" : 16, cursor: "pointer", opacity: tratada ? 0.75 : 1,
+                  display: "flex", gap: 12, alignItems: "flex-start", boxShadow: nova ? "0 1px 3px #0000000f" : "none",
                 }}>
                 <span aria-label={nova ? "Nova" : undefined}
-                  style={{ width: 10, height: 10, borderRadius: "50%", marginTop: 7, flexShrink: 0, background: nova ? (escuro ? "#85B7EB" : "#185FA5") : "transparent" }} />
+                  style={{ width: 10, height: 10, borderRadius: "50%", marginTop: 7, flexShrink: 0, background: nova ? corNova : "transparent" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "2px 10px" }}>
-                    <span style={{ fontSize: 16, fontWeight: semCliente ? 500 : 600, color: semCliente ? T.textSoft : T.text, overflowWrap: "anywhere",
+                    <span style={{ fontSize: 16, fontWeight: semCliente || !nova ? 500 : 700, color: semCliente || !nova ? T.textSoft : T.text, overflowWrap: "anywhere",
                       display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{titulo}</span>
                     {semCliente && i.numero_processo && (
                       <span onClick={(e) => { parar(e); setDetalhe(i); }} role="button"
@@ -2741,14 +2770,14 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
                   <div style={{ display: "flex", gap: 8, marginTop: 13, alignItems: "center", flexWrap: "wrap" }}>
                     {nova ? (
                       <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "LIDO" }); }}
-                        style={{ border: "none", background: T.primary, color: T.primaryText, borderRadius: 999, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <Icon name="check" size={15} color={T.primaryText} /> Marcar como lida
+                        style={{ border: `1.5px solid ${T.primary}`, background: "transparent", color: T.primary, borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name="check" size={15} color={T.primary} /> Marcar como lida
                       </button>
                     ) : (
                       <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "NOVO" }); }}
                         title="Voltar para nova"
-                        style={{ border: "1px solid #F5C518", background: escuro ? "transparent" : "#FFF8E1", color: escuro ? "#F5C518" : "#7A5B00", borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        ✓ {INTIM_STATUS_UM[i.status] || i.status}
+                        style={{ border: "none", background: "transparent", color: T.textMuted, padding: "8px 4px", fontSize: 13, fontWeight: 500, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        ✓ {INTIM_STATUS_UM[i.status] || i.status} · <span style={{ textDecoration: "underline" }}>desfazer</span>
                       </button>
                     )}
                     {!i.prazo_id && i.status !== "IGNORADO" && (
