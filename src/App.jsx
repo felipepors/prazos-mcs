@@ -3750,8 +3750,18 @@ export default function App() {
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
         input, select, textarea { font-family: inherit; }
-        input.data-vazia::-webkit-datetime-edit { color: transparent; }
-        input.data-vazia:focus::-webkit-datetime-edit { color: inherit; }
+        /* v47 — campo de data VAZIO não pode parecer preenchido. O Safari (iPhone/Mac)
+           mostra a data de hoje como sugestão, com cor própria em cada parte
+           (dia/mês/ano) — esconder só o ::-webkit-datetime-edit não bastava. */
+        input.data-vazia:not(:focus) { color: transparent; -webkit-text-fill-color: transparent; }
+        input.data-vazia:not(:focus)::-webkit-datetime-edit,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-fields-wrapper,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-text,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-day-field,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-month-field,
+        input.data-vazia:not(:focus)::-webkit-datetime-edit-year-field,
+        input.data-vazia:not(:focus)::-webkit-date-and-time-value { color: transparent; -webkit-text-fill-color: transparent; }
+        .campo-data input.data-vazia:not(:focus) { opacity: 0; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
         input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus, select:focus, textarea:focus { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
         .campo-data { position:relative; display:flex; align-items:center; gap:10px; overflow:hidden; min-height:48px; }
@@ -4873,7 +4883,7 @@ export default function App() {
                           const di = form.dataInicio||"";
                           const dl = di && du > 0 ? calcularDataFinal(di, du) : "";
                           setForm(f => ({ ...f, diasUteis:e.target.value, dataLimite:dl }));
-                        }} placeholder="15" style={{ ...INP, minHeight:48 }} />
+                        }} placeholder="ex.: 15" style={{ ...INP, minHeight:48 }} />
                       </label>
                     </div>
                     <div style={{ fontSize:13, color:T.textSoft, lineHeight:1.45 }}>
@@ -4933,7 +4943,17 @@ export default function App() {
             <div style={{ display:"flex", flexWrap:"wrap", gap:"8px 10px", alignItems:"center", padding:"14px 20px", borderTop:`1px solid ${T.border}`, background:T.card }}>
               {(!form.processo||!form.dataLimite) && (
                 <span style={{ flex:"1 1 190px", minWidth:0, fontSize:12, color:T.textMuted, lineHeight:1.35 }}>
-                  Falta informar {[!form.processo && "o processo", !form.dataLimite && "a data limite"].filter(Boolean).join(" e ")}.
+                  Falta informar {(() => {
+                    // v47 — no modo "Início + dias úteis", diz o que falta para calcular.
+                    const modoFinal = (form.modoData||"final") === "final";
+                    const itens = [
+                      !form.processo && "o processo",
+                      !form.dataLimite && modoFinal && "a data limite",
+                      !form.dataLimite && !modoFinal && !form.dataInicio && "o 1º dia da contagem",
+                      !form.dataLimite && !modoFinal && !(parseInt(form.diasUteis||0) > 0) && "os dias úteis",
+                    ].filter(Boolean);
+                    return itens.length > 1 ? itens.slice(0, -1).join(", ") + " e " + itens[itens.length - 1] : itens[0];
+                  })()}.
                 </span>
               )}
               <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
