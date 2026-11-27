@@ -15,6 +15,17 @@ import { formatarCentavosBRL } from "../_shared/enriquecimento.ts";
 
 const REMETENTE = Deno.env.get("LOCAWEB_SMTP_USER") ?? "contato@martinscorreadasilva.com.br";
 
+// Cópia oculta de todo aviso enviado (arquivo do escritório). O domínio
+// correadasilvamartins.com.br também é do escritório (confirmado em 27/11/2026;
+// testado na função teste-bcc-dominios em 23/07/2026). Pode ser trocado pelo
+// secret ALVARA_EMAIL_BCC (vários separados por vírgula); "-" desliga a cópia.
+const BCC_PADRAO = "contato@correadasilvamartins.com.br";
+function copiasOcultas(): string[] {
+  const v = (Deno.env.get("ALVARA_EMAIL_BCC") || BCC_PADRAO).trim();
+  if (v === "-") return [];
+  return v.split(/[,;]+/).map((e) => e.trim()).filter((e) => e.includes("@"));
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -126,7 +137,7 @@ Deno.serve(async (req) => {
       await client.send({
         from: REMETENTE,
         to: destinatarios,
-        bcc: ["contato@correadasilvamartins.com.br"],
+        bcc: copiasOcultas(),
         subject: assunto,
         content: corpo,
       });
