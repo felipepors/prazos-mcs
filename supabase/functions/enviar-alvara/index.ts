@@ -1,4 +1,4 @@
-// Passo 6 — Edge Function de ENVIO: enviar-alvara (SMTP Locaweb).
+// Passo 6 — Edge Function de ENVIO: enviar-alvara (SMTP Zoho Mail).
 //
 // REGRA DE OURO Nº 1: esta função é a ÚNICA que envia e-mail, e só roda quando
 // chamada explicitamente (o botão "Enviar" da tela de aprovação — Passo 7).
@@ -7,13 +7,39 @@
 // Fluxo: recebe { alvara_id } -> lê o alvará (com o JWT do usuário, RLS preservado)
 // -> valida (status 'aguardando_aprovacao' e e-mail do prestador cadastrado)
 // -> monta o corpo (bruto E líquido, data do creditamento, conta) -> envia via
-// SMTP Locaweb -> só após sucesso marca status = 'enviado'.
+// SMTP Zoho -> só após sucesso marca status = 'enviado'.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { formatarCentavosBRL } from "../_shared/enriquecimento.ts";
+import { conferirAlvara, formatarCentavosBRL } from "../_shared/enriquecimento.ts";
+import { autorizarEmail } from "../_shared/autorizacao.ts";
 
-const REMETENTE = Deno.env.get("LOCAWEB_SMTP_USER") ?? "contato@martinscorreadasilva.com.br";
+// Remetente FIXO (decisão do escritório, 27/11/2026): todo aviso de alvará sai
+// de contato@martinscorreadasilva.com.br. Não vem de secret de propósito —
+// um secret trocado por engano não muda o remetente. É também a conta que
+// autentica no SMTP (o Zoho recusa remetente diferente da conta autenticada).
+const REMETENTE = "contato@martinscorreadasilva.com.br";
+
+// SMTP do Zoho Mail (servidor trocado da Locaweb em 27/11/2026).
+// smtppro.zoho.com é o servidor de contas com domínio próprio no datacenter
+// dos EUA (zoho.com). Se a conta estiver em outro datacenter, troque pelo
+// secret ALVARA_SMTP_HOST (ex.: smtppro.zoho.eu). O host exato aparece no
+// Zoho Mail em Configurações -> Contas de e-mail -> SMTP.
+// Porta 465 = SSL implícito. (587/STARTTLS derruba o worker neste runtime —
+// ver buscar-intimacoes.)
+const SMTP_HOST = Deno.env.get("ALVARA_SMTP_HOST") || "smtppro.zoho.com";
+const SMTP_PORTA = 465;
+
+// Cópia oculta de todo aviso enviado (arquivo do escritório). O domínio
+// correadasilvamartins.com.br também é do escritório (confirmado em 27/11/2026;
+// testado na função teste-bcc-dominios em 23/07/2026). Pode ser trocado pelo
+// secret ALVARA_EMAIL_BCC (vários separados por vírgula); "-" desliga a cópia.
+const BCC_PADRAO = "contato@correadasilvamartins.com.br";
+function copiasOcultas(): string[] {
+  const v = (Deno.env.get("ALVARA_EMAIL_BCC") || BCC_PADRAO).trim();
+  if (v === "-") return [];
+  return v.split(/[,;]+/).map((e) => e.trim()).filter((e) => e.includes("@"));
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,8 +66,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
 
   try {
-    const smtpPass = Deno.env.get("LOCAWEB_SMTP_PASS") ?? "";
-    if (!smtpPass) return json({ error: "LOCAWEB_SMTP_PASS ausente nos secrets" }, 500);
+    // Senha de APLICATIVO do Zoho (com 2FA ligado a senha normal é recusada).
+    const smtpPass = Deno.env.get("ZOHO_SMTP_PASS") ?? "";
+    if (!smtpPass) return json({ error: "ZOHO_SMTP_PASS ausente nos secrets" }, 500);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Sem Authorization (JWT do usuario)" }, 401);
@@ -54,6 +81,8 @@ Deno.serve(async (req) => {
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Usuario nao autenticado" }, 401);
+    const autz = autorizarEmail(userData.user.email);
+    if (!autz.ok) return json({ error: autz.erro }, autz.status);
 
     const reqBody = await req.json().catch(() => ({}));
     const alvara_id = reqBody.alvara_id;
@@ -74,11 +103,19 @@ Deno.serve(async (req) => {
     if (alvara.status === "enviado") {
       return json({ error: "Este alvara ja foi enviado" }, 409);
     }
+    if (alvara.status === "enviando") {
+      return json({ error: "Este alvara ja esta sendo enviado" }, 409);
+    }
     if (alvara.status !== "aguardando_aprovacao") {
       return json({ error: `Status invalido para envio: ${alvara.status}` }, 409);
     }
     if (!alvara.email_destino) {
       return json({ error: "Prestador sem e-mail cadastrado. Cadastre antes de enviar." }, 400);
+    }
+    // Regra de ouro nº 4: a conferência dos valores é código, não modelo.
+    const conf = conferirAlvara(alvara);
+    if (conf.bloqueios.length > 0) {
+      return json({ error: `Envio bloqueado: ${conf.bloqueios.join("; ")}`, bloqueios: conf.bloqueios }, 422);
     }
 
     // Monta o corpo: bruto E líquido, data do creditamento, conta.
@@ -112,27 +149,52 @@ Deno.serve(async (req) => {
       return json({ error: "Nenhum e-mail válido em email_destino" }, 400);
     }
 
-    // Envio SMTP Locaweb. Remetente = conta autenticada (exigência da Locaweb).
-    const client = new SMTPClient({
-      connection: {
-        hostname: "email-ssl.com.br",
-        port: 465,
-        tls: true,
-        auth: { username: REMETENTE, password: smtpPass },
-      },
-    });
+    // Reserva atômica: só segue quem trocar aguardando_aprovacao -> enviando.
+    // Dois cliques, duas abas ou uma retentativa não mandam o e-mail duas vezes.
+    const { data: reservado, error: resErr } = await supabase
+      .from("alvaras")
+      .update({ status: "enviando", atualizado_em: new Date().toISOString() })
+      .eq("id", alvara_id)
+      .eq("status", "aguardando_aprovacao")
+      .select("id");
+    if (resErr) return json({ error: `Falha ao reservar o envio: ${resErr.message}` }, 500);
+    if (!reservado || reservado.length === 0) {
+      return json({ error: "Este alvara ja esta sendo enviado ou ja foi enviado" }, 409);
+    }
 
+    // Envio SMTP Zoho. Remetente = conta autenticada (exigência do Zoho).
+    // Só volta para a fila se o servidor NÃO aceitou a mensagem. Erro depois do
+    // aceite (ex.: ao fechar a conexão) não é falha de envio — destravar aí
+    // permitiria reenviar um e-mail que já saiu (apontado na revisão do PR #21).
+    let client: SMTPClient | null = null;
     try {
+      client = new SMTPClient({
+        connection: {
+          hostname: SMTP_HOST,
+          port: SMTP_PORTA,
+          tls: true,
+          auth: { username: REMETENTE, password: smtpPass },
+        },
+      });
       await client.send({
         from: REMETENTE,
         to: destinatarios,
-        bcc: ["contato@correadasilvamartins.com.br"],
+        bcc: copiasOcultas(),
         subject: assunto,
         content: corpo,
       });
-    } finally {
-      await client.close();
+    } catch (e) {
+      try { await client?.close(); } catch { /* conexão já caiu */ }
+      // Não saiu: devolve para a fila de aprovação para poder tentar de novo.
+      await supabase
+        .from("alvaras")
+        .update({ status: "aguardando_aprovacao", atualizado_em: new Date().toISOString() })
+        .eq("id", alvara_id)
+        .eq("status", "enviando");
+      return json({ error: `Falha no SMTP: ${e instanceof Error ? e.message : e}` }, 502);
     }
+    // Mensagem aceita pelo servidor: falha ao fechar a conexão não muda nada.
+    try { await client?.close(); } catch { /* ignorado de propósito */ }
 
     // Só marca 'enviado' APÓS o envio bem-sucedido.
     const { error: upErr } = await supabase

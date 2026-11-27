@@ -14,7 +14,7 @@ e reutiliza a infraestrutura que **já está no ar**.
 1. **Rascunho nunca dispara sozinho.** O e-mail só é enviado quando o Felipe clica
    "Enviar" na tela de aprovação do dashboard. **Não existe envio automático.**
 2. **Segredos só em variáveis de ambiente / Supabase secrets, NUNCA no Git.** Vale para
-   `ANTHROPIC_API_KEY` e `LOCAWEB_SMTP_PASS`. O `.gitignore` blinda `.env`, `*.db`, credenciais.
+   `ANTHROPIC_API_KEY` e `ZOHO_SMTP_PASS`. O `.gitignore` blinda `.env`, `*.db`, credenciais.
 3. **Branch antes de `main`.** Toda mudança vai em branch e só sobe pra `main` após revisão
    do Felipe (via PR). Nada é mergeado sem aprovação.
 4. **O valor NUNCA é calculado pelo modelo de IA.** O LLM só *transcreve* os números do PDF.
@@ -34,7 +34,7 @@ e reutiliza a infraestrutura que **já está no ar**.
   - **Postgres:** tabelas `prestadores` (CNPJ → e-mail, com RLS) e `alvaras` (registro + status).
 - **Dashboard — MCS Prazos** (React/Vite/JSX na Vercel, este repo): aba "Alvarás" com upload
   de PDF, lista e tela de revisão com botão **Enviar**.
-- **Envio — SMTP da Locaweb** (só na aprovação).
+- **Envio — SMTP do Zoho Mail** (só na aprovação). Trocado da Locaweb em 27/11/2026.
 
 > Tabelas existentes no projeto (não mexer): `estado_usuario`, `publicacoes_djen`,
 > `movimentacoes_djen`. Os nomes `prestadores` e `alvaras` estão livres.
@@ -47,13 +47,18 @@ e reutiliza a infraestrutura que **já está no ar**.
 - Modelo: **`claude-haiku-4-5`** (barato, ótimo para extração).
 - API key via env **`ANTHROPIC_API_KEY`**.
 
-### Locaweb (envio SMTP)
-- Host: `email-ssl.com.br`
-- Porta: `465` SSL/TLS (alternativa: `587` STARTTLS)
-- Usuário: **`contato@martinscorreadasilva.com.br`** (e-mail completo)
-- Senha: env **`LOCAWEB_SMTP_PASS`** (nunca no Git)
-- ⚠️ A conta autenticada no SMTP deve ser **a mesma** usada como remetente, senão a Locaweb
-  rejeita o envio. Remetente = `contato@martinscorreadasilva.com.br`.
+### Zoho Mail (envio SMTP)
+- Host: `smtppro.zoho.com` (contas com domínio próprio, datacenter EUA). Outro datacenter →
+  secret **`ALVARA_SMTP_HOST`** (ex.: `smtppro.zoho.eu`). Host exato: Zoho Mail →
+  Configurações → Contas de e-mail → SMTP.
+- Porta: `465` SSL (587/STARTTLS derruba o worker no runtime das Edge Functions).
+- Usuário/remetente: **`contato@martinscorreadasilva.com.br`** — **fixo no código**, não vem de secret.
+- Senha: env **`ZOHO_SMTP_PASS`** — senha de **aplicativo** do Zoho se o 2FA estiver ligado
+  (nunca no Git).
+- ⚠️ A conta autenticada no SMTP deve ser **a mesma** usada como remetente, senão o Zoho
+  rejeita o envio.
+- BCC padrão: `contato@correadasilvamartins.com.br` (domínio do escritório; secret
+  `ALVARA_EMAIL_BCC` troca, `-` desliga).
 
 ---
 
@@ -112,7 +117,7 @@ O modelo **apenas transcreve** — não calcula, não converte datas, não valid
 - **Passo 3** — Banco: tabelas `prestadores` (RLS) e `alvaras` + cadastro CNPJ→e-mail.
 - **Passo 4** — Edge Function orquestradora (extração + enriquecimento + matching + gravar).
 - **Passo 5** — Storage: bucket + gatilho que aciona a Edge Function.
-- **Passo 6** — Envio SMTP Locaweb (separado, só na aprovação).
+- **Passo 6** — Envio SMTP (Zoho; antes Locaweb) — separado, só na aprovação.
 - **Passo 7** — Dashboard: aba "Alvarás" (upload, lista, revisão, botão Enviar).
 
 ---

@@ -309,14 +309,8 @@ async function fazerLogin(email, senha) {
   if (error) throw _mapAuthError(error);
   return data;
 }
-async function criarConta(email, senha) {
-  if (!SUPABASE_ATIVO) throw new Error("Supabase não configurado");
-  const sb = await initSupabase();
-  if (!sb) throw new Error("Supabase indisponível");
-  const { data, error } = await sb.auth.signUp({ email, password: senha });
-  if (error) throw _mapAuthError(error);
-  return data;
-}
+// Cadastro de conta pelo app removido: o cadastro está fechado no Supabase Auth
+// (v31b, 02/08). Conta nova só pelo painel do Supabase → Authentication → Add user.
 async function fazerLogout() {
   if (!SUPABASE_ATIVO) return;
   const sb = await initSupabase();
@@ -1136,15 +1130,13 @@ function ListaTarefas({ tarefas, setTarefas, onEdit, onDelete, onToggle, T, modo
 function TelaLogin({ T, modo, onToast }) {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [criando, setCriando] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
   const submeter = async () => {
     setErro(""); setLoading(true);
     try {
-      if (criando) await criarConta(email, senha);
-      else await fazerLogin(email, senha);
+      await fazerLogin(email, senha);
     } catch (e) {
       const msgs = {
         "auth/invalid-email":     "E-mail inválido",
@@ -1184,7 +1176,7 @@ function TelaLogin({ T, modo, onToast }) {
           {erro && <div style={{ background:T.dangerSoft, border:`1px solid ${T.danger}33`, color:T.danger, borderRadius:8, padding:"8px 12px", fontSize:12 }}>{erro}</div>}
           <button onClick={submeter} disabled={loading || !email || !senha}
             style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:10, padding:"12px", fontWeight:700, fontSize:14, cursor:"pointer", opacity:(loading||!email||!senha)?0.5:1, marginTop:4 }}>
-            {loading ? "Aguarde..." : criando ? "Criar conta" : "Entrar"}
+            {loading ? "Aguarde..." : "Entrar"}
           </button>
           {/* v31b — cadastro fechado no Supabase (02/08): link "Criar uma" removido. Conta nova: painel do Supabase → Add user. */}
         </div>
@@ -2030,6 +2022,7 @@ function PainelDJEN({ T, modo, setPrazos, prazos, setAba, setForm, setModal, toa
 const STATUS_ALVARA = {
   extraido:             { label:"Extraído",             cor:"#6b7280" },
   aguardando_aprovacao: { label:"Aguardando aprovação", cor:"#B8860B" },
+  enviando:             { label:"Enviando…",            cor:"#2b6cb0" },
   enviado:              { label:"Enviado",              cor:"#2E7D32" },
 };
 
@@ -2048,6 +2041,32 @@ function fmtDoc(d) {
 function tipoDoc(d) {
   const n = soDigitos(d).length;
   return n === 14 ? "CNPJ" : n === 11 ? "CPF" : "DESCONHECIDO";
+}
+
+// Conferência antes do envio — ESPELHO de conferirAlvara() em
+// supabase/functions/_shared/enriquecimento.ts (o servidor também bloqueia).
+function conferirAlvara(a) {
+  const bloqueios = [], avisos = [];
+  const bruto = a.valor_bruto_centavos ?? 0, despesa = a.despesa_bancaria_centavos ?? 0;
+  const ir = a.imposto_renda_centavos ?? 0, liquido = a.valor_liquido_creditado_centavos ?? 0;
+  if (bruto <= 0) bloqueios.push("Valor bruto zerado ou ausente — a extração provavelmente falhou");
+  if (despesa < 0) bloqueios.push("Despesa bancária negativa");
+  if (ir < 0) bloqueios.push("Imposto de renda negativo");
+  if (liquido !== bruto - despesa - ir) bloqueios.push("Valor líquido não bate com bruto − despesa − IR");
+  if (bruto > 0 && liquido <= 0) bloqueios.push("Valor líquido zerado ou negativo");
+  if (!a.documento_valido) avisos.push("CNPJ/CPF com dígito verificador inválido ou não identificado");
+  if (!a.data_creditamento) avisos.push("Data do creditamento não encontrada no PDF");
+  const processo = (a.processo || "").trim();
+  if (!processo) avisos.push("Número do processo não encontrado no PDF");
+  else if (!/^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/.test(processo)) avisos.push("Número do processo fora do padrão CNJ — confira");
+  if (!(a.numero_alvara || "").trim()) avisos.push("Número do alvará não encontrado");
+  return { bloqueios, avisos };
+}
+
+// CPF/CNPJ lido do PDF é confiável o bastante para virar cadastro de prestador?
+function docReconhecido(a) {
+  const n = soDigitos(a.documento).length;
+  return (n === 11 || n === 14) && !!a.documento_valido;
 }
 
 // Prévia do e-mail — espelha o corpo montado pela função enviar-alvara (Passo 6).
@@ -2083,10 +2102,14 @@ function useAlvaras(userId) {
 }
 
 // Extrai a mensagem de erro do corpo JSON de uma Edge Function (supabase-js).
+// O corpo da resposta só pode ser lido uma vez — use corpoErroFn quando precisar
+// de outros campos além da mensagem (ex.: alvará duplicado).
+async function corpoErroFn(error) {
+  try { return await error.context.json(); } catch { return null; }
+}
 async function msgErroFn(error) {
-  let m = error?.message || "erro";
-  try { const b = await error.context.json(); if (b?.error) m = b.error; } catch (e) {}
-  return m;
+  const b = await corpoErroFn(error);
+  return b?.error || error?.message || "erro";
 }
 
 // Cadastro proativo de prestadores (CNPJ/CPF → e-mail). Alimenta o auto-match
@@ -2904,6 +2927,9 @@ function PainelAlvaras({ T, toast, user }) {
   const [subindo, setSubindo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [emailNovo, setEmailNovo] = useState("");
+  // Guardados com o id do alvará: trocar de alvará volta ao padrão sozinho.
+  const [editandoEmailId, setEditandoEmailId] = useState(null);  // "Trocar destinatário" aberto
+  const [soNesteAlvaraId, setSoNesteAlvaraId] = useState(null);  // não gravar no cadastro de prestadores
   const [verPrestadores, setVerPrestadores] = useState(false);
   const [arrastando, setArrastando] = useState(false);
   const fileRef = useRef(null);
@@ -2939,7 +2965,17 @@ function PainelAlvaras({ T, toast, user }) {
       const { error: upErr } = await sb.storage.from("alvaras").upload(path, file, { contentType: "application/pdf", upsert: false });
       if (upErr) throw new Error(upErr.message);
       const { data, error: fnErr } = await sb.functions.invoke("processar-alvara", { body: { storage_path: path } });
-      if (fnErr) throw new Error(await msgErroFn(fnErr));
+      if (fnErr) {
+        const b = await corpoErroFn(fnErr);
+        if (b?.duplicado && b.alvara_existente) {
+          // Mesmo alvará já cadastrado: não cria outro — abre o que já existe.
+          toast(b.error + " — abrindo o registro existente", "info");
+          await carregar();
+          setDetalhe(b.alvara_existente); setEmailNovo("");
+          return;
+        }
+        throw new Error(b?.error || fnErr.message || "erro");
+      }
       if (data?.error) throw new Error(data.error);
       toast("Alvará processado — revise e aprove", "success");
       await carregar();
@@ -2958,10 +2994,19 @@ function PainelAlvaras({ T, toast, user }) {
     const email = emailNovo.trim();
     if (!email.split(/[,;]+/).some(e => /.+@.+\..+/.test(e.trim()))) { toast("Informe pelo menos um e-mail válido", "danger"); return; }
     const digits = (detalhe.documento || "").replace(/\D/g, "");
-    if (digits.length !== 11 && digits.length !== 14) {
-      toast("Documento não identificado neste alvará", "danger"); return;
-    }
     const sb = await initSupabase();
+    // CPF/CNPJ não reconhecido no PDF (ou o Felipe escolheu "só neste alvará"):
+    // grava o e-mail SÓ neste alvará, sem criar cadastro com documento errado.
+    if (!docReconhecido(detalhe) || soNesteAlvaraId === detalhe.id) {
+      const { error: upErr } = await sb.from("alvaras")
+        .update({ email_destino: email, prestador_id: null }).eq("id", detalhe.id);
+      if (upErr) { toast("Falha ao salvar e-mail: " + upErr.message, "danger"); return; }
+      toast("E-mail definido para este alvará", "success");
+      setDetalhe({ ...detalhe, email_destino: email, prestador_id: null });
+      setEditandoEmailId(null); setEmailNovo("");
+      carregar();
+      return;
+    }
     const { data: prest, error } = await sb.from("prestadores")
       .upsert(
         { user_id: user.id, documento: digits, documento_tipo: detalhe.documento_tipo, nome: detalhe.prestador, email },
@@ -2974,6 +3019,7 @@ function PainelAlvaras({ T, toast, user }) {
     if (upErr) { toast("Falha ao vincular: " + upErr.message, "danger"); return; }
     toast("E-mail do prestador cadastrado", "success");
     setDetalhe({ ...detalhe, email_destino: email, prestador_id: prest.id });
+    setEditandoEmailId(null); setEmailNovo("");
     carregar();
   };
 
@@ -2995,6 +3041,25 @@ function PainelAlvaras({ T, toast, user }) {
     } finally {
       setEnviando(false);
     }
+  };
+
+  // Destrava um envio interrompido (status preso em 'enviando'). Só troca se
+  // ainda estiver 'enviando' — não desfaz um 'enviado' gravado no meio tempo.
+  // Só libera se o 'enviando' tem mais de 3 min: a função de envio é encerrada
+  // pelo Supabase antes disso, então não há envio ainda rodando em outra aba
+  // (apontado na revisão do PR #21). A condição vai no próprio UPDATE (atômico).
+  const liberarReenvio = async (a) => {
+    if (!window.confirm("Confirma que o e-mail NÃO foi enviado? O alvará volta para aguardando aprovação.")) return;
+    const sb = await initSupabase();
+    const limite = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const { data, error } = await sb.from("alvaras")
+      .update({ status: "aguardando_aprovacao", atualizado_em: new Date().toISOString() })
+      .eq("id", a.id).eq("status", "enviando").lt("atualizado_em", limite).select().maybeSingle();
+    if (error) { toast("Falha ao liberar: " + error.message, "danger"); return; }
+    if (!data) { toast("O envio começou há menos de 3 minutos ou já terminou — aguarde e reabra o alvará", "info"); await carregar(); setDetalhe(null); return; }
+    toast("Liberado para reenvio", "success");
+    setDetalhe(data);
+    carregar();
   };
 
   // Exclui o alvará (qualquer status, inclusive 'enviado') + o PDF no bucket.
@@ -3093,8 +3158,14 @@ function PainelAlvaras({ T, toast, user }) {
         const a = detalhe;
         const st = STATUS_ALVARA[a.status] || STATUS_ALVARA.extraido;
         const semEmail = !a.email_destino;
+        const editandoEmail = editandoEmailId === a.id;
+        const reconhecido = docReconhecido(a);
         const enviado = a.status === "enviado";
-        const bloqueado = enviado || semEmail || enviando;
+        // 'enviando' gravado no banco e nenhum envio em curso nesta tela:
+        // o envio foi interrompido no meio (aba fechada, queda de rede…).
+        const travado = a.status === "enviando" && !enviando;
+        const conf = conferirAlvara(a);
+        const bloqueado = enviado || semEmail || enviando || a.status === "enviando" || conf.bloqueios.length > 0;
         return (
           <div onClick={() => setDetalhe(null)}
             style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex",
@@ -3150,12 +3221,58 @@ function PainelAlvaras({ T, toast, user }) {
                       padding:"12px 14px", fontSize:12, color:T.text, fontFamily:"inherit", lineHeight:1.5, resize:"vertical" }} />
                 </div>
 
-                {semEmail && !enviado && (
-                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>CNPJ/CPF sem e-mail cadastrado</div>
-                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
-                      Informe o(s) e-mail(s) do prestador para habilitar o envio (fica salvo para os próximos alvarás). Para múltiplos destinatários, separe por vírgula.
+                {!enviado && (conf.bloqueios.length > 0 || conf.avisos.length > 0) && (
+                  <div style={{ borderRadius:10, padding:"12px 14px",
+                    background: conf.bloqueios.length ? T.dangerSoft : T.cardAlt,
+                    border: `1px solid ${conf.bloqueios.length ? T.danger : "#B8860B"}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color: conf.bloqueios.length ? T.danger : T.text, marginBottom:6 }}>
+                      {conf.bloqueios.length ? "Envio bloqueado — confira o PDF" : "Confira no PDF antes de enviar"}
                     </div>
+                    <ul style={{ margin:0, paddingLeft:18, fontSize:12, color:T.text, lineHeight:1.5 }}>
+                      {conf.bloqueios.map(m => <li key={m} style={{ color:T.danger, fontWeight:600 }}>{m}</li>)}
+                      {conf.avisos.map(m => <li key={m}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {travado && (
+                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:"1px solid #2b6cb0" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>Envio interrompido</div>
+                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
+                      Este alvará ficou marcado como “enviando”. Confira na pasta de enviados de contato@martinscorreadasilva.com.br
+                      se o e-mail saiu. Só libere para reenvio se ele <strong>não</strong> saiu (a liberação só é aceita 3 minutos após o início do envio).
+                    </div>
+                    <button onClick={() => liberarReenvio(a)}
+                      style={{ background:"transparent", border:"1px solid #2b6cb0", color:"#2b6cb0", borderRadius:9, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      Não saiu — liberar para reenvio
+                    </button>
+                  </div>
+                )}
+
+                {!semEmail && !enviado && !editandoEmail && a.status !== "enviando" && (
+                  <button onClick={() => { setEditandoEmailId(a.id); setEmailNovo(a.email_destino || ""); }}
+                    style={{ alignSelf:"flex-start", background:"none", border:"none", padding:0, color:T.primary, fontSize:12, fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>
+                    Trocar destinatário
+                  </button>
+                )}
+
+                {(semEmail || editandoEmail) && !enviado && (
+                  <div style={{ background:T.cardAlt, borderRadius:10, padding:"12px 14px", border:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:6 }}>
+                      {editandoEmail ? "Trocar destinatário" : reconhecido ? "CNPJ/CPF sem e-mail cadastrado" : "CPF/CNPJ não reconhecido no PDF"}
+                    </div>
+                    <div style={{ fontSize:12, color:T.textMuted, marginBottom:8 }}>
+                      {reconhecido
+                        ? "Informe o(s) e-mail(s) do prestador para habilitar o envio. Para múltiplos destinatários, separe por vírgula."
+                        : `O documento lido do PDF (${a.documento || "nenhum"}) não é um CPF/CNPJ válido, então não dá para usar o cadastro. Informe o(s) e-mail(s): valem só para este alvará.`}
+                    </div>
+                    {reconhecido && (
+                      <label style={{ display:"flex", alignItems:"center", gap:7, fontSize:12, color:T.text, marginBottom:8, cursor:"pointer" }}>
+                        <input type="checkbox" checked={soNesteAlvaraId !== a.id}
+                          onChange={e => setSoNesteAlvaraId(e.target.checked ? null : a.id)} />
+                        Salvar no cadastro de {a.documento_tipo} {fmtDoc(a.documento)} para os próximos alvarás
+                      </label>
+                    )}
                     <div style={{ display:"flex", gap:8 }}>
                       <input value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@prestador.com.br ou email1, email2"
                         style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:9, padding:"9px 11px", fontSize:13, color:T.text }} />
@@ -3163,6 +3280,12 @@ function PainelAlvaras({ T, toast, user }) {
                         style={{ background:T.primary, color:T.primaryText, border:"none", borderRadius:9, padding:"0 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         Salvar
                       </button>
+                      {editandoEmail && (
+                        <button onClick={() => { setEditandoEmailId(null); setEmailNovo(""); }}
+                          style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.text, borderRadius:9, padding:"0 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                          Cancelar
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3185,7 +3308,7 @@ function PainelAlvaras({ T, toast, user }) {
                       border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:700,
                       cursor: bloqueado ? "not-allowed" : "pointer" }}>
                     <Icon name="mail" size={15} color={bloqueado ? T.textMuted : "#1B2A4A"} />
-                    {enviado ? "Já enviado" : enviando ? "Enviando…" : "Enviar"}
+                    {enviado ? "Já enviado" : (enviando || a.status === "enviando") ? "Enviando…" : "Enviar"}
                   </button>
                 </div>
               </div>

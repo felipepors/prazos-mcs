@@ -19,6 +19,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { extrairAlvara } from "../_shared/extracao.ts";
 import { enriquecer } from "../_shared/enriquecimento.ts";
+import { autorizarEmail } from "../_shared/autorizacao.ts";
 
 const BUCKET = "alvaras";
 
@@ -55,6 +56,8 @@ Deno.serve(async (req) => {
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Usuario nao autenticado" }, 401);
+    const autz = autorizarEmail(userData.user.email);
+    if (!autz.ok) return json({ error: autz.erro }, autz.status);
     const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
@@ -72,6 +75,29 @@ Deno.serve(async (req) => {
     // 1) Extracao (so transcricao)  2) Enriquecimento (calculo deterministico)
     const extraido = await extrairAlvara(pdfBase64, apiKey);
     const alvara = enriquecer(extraido);
+
+    // Duplicado? O mesmo PDF subido duas vezes geraria dois rascunhos e,
+    // potencialmente, dois e-mails ao prestador. Se o nº do alvará já existe,
+    // não grava de novo: apaga o PDF recém-enviado e devolve o registro antigo.
+    if (alvara.numero_alvara) {
+      const { data: existente } = await supabase
+        .from("alvaras")
+        .select("*")
+        .eq("numero_alvara", alvara.numero_alvara)
+        .order("criado_em", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (existente) {
+        if (storagePath && storagePath !== existente.pdf_path) {
+          await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+        }
+        return json({
+          error: `Alvara ${alvara.numero_alvara} ja foi cadastrado (status: ${existente.status})`,
+          duplicado: true,
+          alvara_existente: existente,
+        }, 409);
+      }
+    }
 
     // 3) Matching CNPJ/CPF -> e-mail em prestadores (documento = so digitos).
     const documentoDigitos = alvara.documento.replace(/\D/g, "");
@@ -118,7 +144,23 @@ Deno.serve(async (req) => {
       .select()
       .single();
 
-    if (insErr) return json({ error: `Falha ao gravar alvara: ${insErr.message}` }, 500);
+    if (insErr) {
+      // 23505 = índice único (user_id, numero_alvara): outra requisição gravou o
+      // mesmo alvará entre a busca acima e este insert (ex.: duas abas).
+      if (insErr.code === "23505") {
+        const { data: existente } = await supabase
+          .from("alvaras").select("*").eq("numero_alvara", alvara.numero_alvara).maybeSingle();
+        if (storagePath && storagePath !== existente?.pdf_path) {
+          await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+        }
+        return json({
+          error: `Alvara ${alvara.numero_alvara} ja foi cadastrado`,
+          duplicado: true,
+          alvara_existente: existente,
+        }, 409);
+      }
+      return json({ error: `Falha ao gravar alvara: ${insErr.message}` }, 500);
+    }
 
     return json({
       ok: true,
