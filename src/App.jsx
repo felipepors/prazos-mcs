@@ -2777,7 +2777,7 @@ function PainelIntimacoes({ T, modo, user, toast, setForm, setModal, setAba, onC
                       <button disabled={salvando} onClick={(e) => { parar(e); gravar(i.id, { status: "NOVO" }); }}
                         title="Voltar para nova"
                         style={{ border: "none", background: "transparent", color: T.textMuted, padding: "8px 4px", fontSize: 13, fontWeight: 500, cursor: salvando ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        ✓ {INTIM_STATUS_UM[i.status] || i.status} <span style={{ textDecoration: "underline" }}>· desfazer</span>
+                        ✓ {INTIM_STATUS_UM[i.status] || i.status} · <span style={{ textDecoration: "underline" }}>desfazer</span>
                       </button>
                     )}
                     {!i.prazo_id && i.status !== "IGNORADO" && (
