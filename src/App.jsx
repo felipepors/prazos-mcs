@@ -838,11 +838,17 @@ function Badge({ children, color, bg, size=12 }) {
 }
 
 function CampoData({ value, onChange, T, ariaLabel }) {
+  // v48 — o foco é controlado pelo React: no Safari a regra CSS
+  // "input:focus + .dica" não escondia o "Selecionar data" com o calendário
+  // aberto, e o texto ficava sobreposto à data de ponto de partida.
+  const [foco, setFoco] = useState(false);
   return (
     <div className="campo-data" style={{ background:T.card, border:`1.5px solid ${T.border}`, borderRadius:12, padding:"11px 14px", color:T.text }}>
       <span style={{ display:"inline-flex", flexShrink:0 }}><Icon name="calendar" size={18} color={T.textMuted} /></span>
-      <input type="date" className={value ? "" : "data-vazia"} value={value || ""} onChange={e => onChange(e.target.value)} aria-label={ariaLabel} style={{ fontSize:16 }} />
-      {!value && <span className="dica" style={{ color:T.textMuted, fontSize:16 }}>Selecionar data</span>}
+      <input type="date" className={value ? "" : (foco ? "data-vazia data-escolhendo" : "data-vazia")} value={value || ""}
+        onChange={e => onChange(e.target.value)} onFocus={() => setFoco(true)} onBlur={() => setFoco(false)}
+        aria-label={ariaLabel} style={{ fontSize:16 }} />
+      {!value && !foco && <span className="dica" style={{ color:T.textMuted, fontSize:16 }}>Selecionar data</span>}
     </div>
   );
 }
@@ -3827,15 +3833,21 @@ export default function App() {
         /* v47 — campo de data VAZIO não pode parecer preenchido. O Safari (iPhone/Mac)
            mostra a data de hoje como sugestão, com cor própria em cada parte
            (dia/mês/ano) — esconder só o ::-webkit-datetime-edit não bastava. */
-        input.data-vazia:not(:focus) { color: transparent; -webkit-text-fill-color: transparent; }
-        input.data-vazia:not(:focus)::-webkit-datetime-edit,
-        input.data-vazia:not(:focus)::-webkit-datetime-edit-fields-wrapper,
-        input.data-vazia:not(:focus)::-webkit-datetime-edit-text,
-        input.data-vazia:not(:focus)::-webkit-datetime-edit-day-field,
-        input.data-vazia:not(:focus)::-webkit-datetime-edit-month-field,
-        input.data-vazia:not(:focus)::-webkit-datetime-edit-year-field,
-        input.data-vazia:not(:focus)::-webkit-date-and-time-value { color: transparent; -webkit-text-fill-color: transparent; }
-        .campo-data input.data-vazia:not(:focus) { opacity: 0; }
+        input.data-vazia:not(:focus):not(.data-escolhendo) { color: transparent; -webkit-text-fill-color: transparent; }
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit-fields-wrapper,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit-text,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit-day-field,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit-month-field,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-datetime-edit-year-field,
+        input.data-vazia:not(:focus):not(.data-escolhendo)::-webkit-date-and-time-value { color: transparent; -webkit-text-fill-color: transparent; }
+        .campo-data input.data-vazia:not(:focus):not(.data-escolhendo) { opacity: 0; }
+        /* v48 — com o calendário aberto e nada escolhido, o Safari mostra a data
+           de hoje como ponto de partida: fica CINZA até uma data ser escolhida. */
+        input.data-escolhendo::-webkit-datetime-edit-day-field,
+        input.data-escolhendo::-webkit-datetime-edit-month-field,
+        input.data-escolhendo::-webkit-datetime-edit-year-field,
+        input.data-escolhendo::-webkit-datetime-edit-text { color: ${T.textMuted}; -webkit-text-fill-color: ${T.textMuted}; opacity: 0.6; }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: ${modo==="dark"?"invert(1)":"none"}; }
         input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus, select:focus, textarea:focus { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
         .campo-data { position:relative; display:flex; align-items:center; gap:10px; overflow:hidden; min-height:48px; }
@@ -3844,7 +3856,6 @@ export default function App() {
         .campo-data input:focus { box-shadow:none !important; }
         .campo-data:focus-within { border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primary}26; }
         .campo-data .dica { position:absolute; left:42px; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
-        .campo-data input:focus + .dica { display:none; }
         @supports (-webkit-touch-callout: none) { .campo-data input { -webkit-appearance:none; appearance:none; } }
         .hdr-btn { width:38px; height:38px; box-sizing:border-box; display:flex; align-items:center; justify-content:center;
           background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#fff; cursor:pointer;
