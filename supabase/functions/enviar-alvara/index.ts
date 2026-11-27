@@ -1,4 +1,4 @@
-// Passo 6 — Edge Function de ENVIO: enviar-alvara (SMTP Locaweb).
+// Passo 6 — Edge Function de ENVIO: enviar-alvara (SMTP Zoho Mail).
 //
 // REGRA DE OURO Nº 1: esta função é a ÚNICA que envia e-mail, e só roda quando
 // chamada explicitamente (o botão "Enviar" da tela de aprovação — Passo 7).
@@ -7,7 +7,7 @@
 // Fluxo: recebe { alvara_id } -> lê o alvará (com o JWT do usuário, RLS preservado)
 // -> valida (status 'aguardando_aprovacao' e e-mail do prestador cadastrado)
 // -> monta o corpo (bruto E líquido, data do creditamento, conta) -> envia via
-// SMTP Locaweb -> só após sucesso marca status = 'enviado'.
+// SMTP Zoho -> só após sucesso marca status = 'enviado'.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -15,10 +15,20 @@ import { conferirAlvara, formatarCentavosBRL } from "../_shared/enriquecimento.t
 import { autorizarEmail } from "../_shared/autorizacao.ts";
 
 // Remetente FIXO (decisão do escritório, 27/11/2026): todo aviso de alvará sai
-// de contato@martinscorreadasilva.com.br. Não lê LOCAWEB_SMTP_USER de propósito —
+// de contato@martinscorreadasilva.com.br. Não vem de secret de propósito —
 // um secret trocado por engano não muda o remetente. É também a conta que
-// autentica no SMTP (a Locaweb exige remetente = conta autenticada).
+// autentica no SMTP (o Zoho recusa remetente diferente da conta autenticada).
 const REMETENTE = "contato@martinscorreadasilva.com.br";
+
+// SMTP do Zoho Mail (servidor trocado da Locaweb em 27/11/2026).
+// smtppro.zoho.com é o servidor de contas com domínio próprio no datacenter
+// dos EUA (zoho.com). Se a conta estiver em outro datacenter, troque pelo
+// secret ALVARA_SMTP_HOST (ex.: smtppro.zoho.eu). O host exato aparece no
+// Zoho Mail em Configurações -> Contas de e-mail -> SMTP.
+// Porta 465 = SSL implícito. (587/STARTTLS derruba o worker neste runtime —
+// ver buscar-intimacoes.)
+const SMTP_HOST = Deno.env.get("ALVARA_SMTP_HOST") || "smtppro.zoho.com";
+const SMTP_PORTA = 465;
 
 // Cópia oculta de todo aviso enviado (arquivo do escritório). O domínio
 // correadasilvamartins.com.br também é do escritório (confirmado em 27/11/2026;
@@ -56,8 +66,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
 
   try {
-    const smtpPass = Deno.env.get("LOCAWEB_SMTP_PASS") ?? "";
-    if (!smtpPass) return json({ error: "LOCAWEB_SMTP_PASS ausente nos secrets" }, 500);
+    // Senha de APLICATIVO do Zoho (com 2FA ligado a senha normal é recusada).
+    const smtpPass = Deno.env.get("ZOHO_SMTP_PASS") ?? "";
+    if (!smtpPass) return json({ error: "ZOHO_SMTP_PASS ausente nos secrets" }, 500);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Sem Authorization (JWT do usuario)" }, 401);
@@ -151,12 +162,12 @@ Deno.serve(async (req) => {
       return json({ error: "Este alvara ja esta sendo enviado ou ja foi enviado" }, 409);
     }
 
-    // Envio SMTP Locaweb. Remetente = conta autenticada (exigência da Locaweb).
+    // Envio SMTP Zoho. Remetente = conta autenticada (exigência do Zoho).
     try {
       const client = new SMTPClient({
         connection: {
-          hostname: "email-ssl.com.br",
-          port: 465,
+          hostname: SMTP_HOST,
+          port: SMTP_PORTA,
           tls: true,
           auth: { username: REMETENTE, password: smtpPass },
         },
