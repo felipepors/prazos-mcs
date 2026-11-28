@@ -509,24 +509,30 @@ function isoLocal(d = new Date()) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-function diasUteisRestantes(dataStr) {
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
+// Conta os dias úteis de hoje (incluso, se útil) até o vencimento (excluso):
+// 0 = vence hoje, 1 = próximo dia útil, negativo = dias úteis de atraso.
+// Prazo com data em dia sem expediente fica prorrogado para o próximo dia útil.
+// v50 — em dia SEM expediente (sábado, domingo, feriado) nada "vence hoje": o
+// próximo dia útil é 1. Antes, no sábado, a segunda aparecia como "vence hoje"
+// porque o próprio sábado não entra na contagem. `ref` só existe p/ os testes.
+function diasUteisRestantes(dataStr, ref = new Date()) {
+  const hoje = new Date(ref); hoje.setHours(0,0,0,0);
   const alvo = new Date(dataStr + "T00:00:00");
+  let count = 0;
   if (alvo < hoje) {
-    let count = 0;
     const cur = new Date(alvo);
     while (cur < hoje) {
       if (isDiaUtil(isoLocal(cur))) count--;
       cur.setDate(cur.getDate() + 1);
     }
-    return count;
+  } else {
+    const cur = new Date(hoje);
+    while (cur < alvo) {
+      if (isDiaUtil(isoLocal(cur))) count++;
+      cur.setDate(cur.getDate() + 1);
+    }
   }
-  let count = 0;
-  const cur = new Date(hoje);
-  while (cur < alvo) {
-    if (isDiaUtil(isoLocal(cur))) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
+  if (count >= 0 && !isDiaUtil(isoLocal(hoje))) count++;
   return count;
 }
 

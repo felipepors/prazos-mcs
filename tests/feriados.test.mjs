@@ -16,7 +16,7 @@ const trecho = (ini, fim) => {
 const F = new Function(
   trecho("// ─── Feriados global", "function calcStatus") +
   trecho("// v47 — feriados gerados POR ANO", "// ═════════════════════════════════════════════════════════════════════════════\n// COMPONENTES UI") +
-  "; return { isoLocal, setFeriadosGlobal, calcularDataFinal, _pascoa, _feriadosDoAno, _diasEntre, _agruparFeriados, FERIADOS_SEED, FERIADOS_NOMES_SEED, NOME_RECESSO };",
+  "; return { isoLocal, setFeriadosGlobal, calcularDataFinal, diasUteisRestantes, _pascoa, _feriadosDoAno, _diasEntre, _agruparFeriados, FERIADOS_SEED, FERIADOS_NOMES_SEED, NOME_RECESSO };",
 )();
 
 let falhas = 0;
@@ -66,6 +66,28 @@ for (const [ini, du, esperado, desc] of [
   ["2026-06-10", 2, "2026-06-11", "11/06/2026 não é feriado"],
   ["2026-06-03", 2, "2026-06-05", "Corpus Christi 2026 é 04/06"],
 ]) eq(F.calcularDataFinal(ini, du), esperado, `${ini} + ${du} d.u. (${desc})`);
+
+console.log("Dias úteis restantes (selo \"vence hoje\" / \"1 dia útil\")");
+// [hoje, vencimento, esperado, descrição] — 0 = vence hoje, 1 = próximo dia útil
+for (const [hoje, venc, esperado, desc] of [
+  ["2026-11-28", "2026-11-30", 1, "sábado → segunda é o próximo dia útil, não \"vence hoje\""],
+  ["2026-11-29", "2026-11-30", 1, "domingo → segunda"],
+  ["2026-11-28", "2026-12-01", 2, "sábado → terça"],
+  ["2026-11-28", "2026-11-27", -1, "sábado → sexta já venceu"],
+  ["2026-11-29", "2026-11-27", -1, "domingo → sexta já venceu"],
+  ["2026-11-28", "2026-11-28", 1, "vencimento no sábado, visto no sábado: prorroga p/ segunda"],
+  ["2026-11-29", "2026-11-28", 1, "vencimento no sábado, visto no domingo: prorroga p/ segunda"],
+  ["2026-11-30", "2026-11-28", 0, "vencimento no sábado, visto na segunda: vence hoje"],
+  ["2026-11-30", "2026-11-30", 0, "segunda → segunda: vence hoje"],
+  ["2026-11-30", "2026-12-01", 1, "segunda → terça"],
+  ["2026-11-30", "2026-11-27", -1, "segunda → sexta anterior"],
+  ["2026-11-27", "2026-11-30", 1, "sexta → segunda"],
+  ["2026-11-27", "2026-11-27", 0, "sexta → sexta: vence hoje"],
+  ["2026-11-27", "2026-11-28", 1, "sexta → sábado (prorroga p/ segunda)"],
+  ["2026-12-08", "2026-12-09", 1, "feriado (Dia da Justiça) → dia seguinte"],
+  ["2026-12-08", "2026-12-07", -1, "feriado → véspera já venceu"],
+  ["2026-12-07", "2026-12-09", 1, "segunda → quarta, pulando o feriado de 08/12"],
+]) eq(F.diasUteisRestantes(venc, new Date(hoje + "T12:00:00")), esperado, `hoje ${hoje}, vence ${venc} (${desc})`);
 
 console.log("Período De/Até do modal de feriados");
 eq(F._diasEntre("2026-12-01", "2026-12-02").join(","), "2026-12-01,2026-12-02", "01 a 02/12");
